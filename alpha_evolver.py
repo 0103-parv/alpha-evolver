@@ -6,6 +6,8 @@ on numpy alone; every other dependency is optional and guarded.
 """
 
 import argparse
+import copy
+import json
 import math
 import warnings
 
@@ -367,6 +369,161 @@ def fitness(stats):
             - 0.02 * stats["size"])
 
 
+# ---------------------------------------------------------------------------
+# The memory store: the spine.
+#
+# A fast store of verified alpha records keyed by canonical formula string, plus
+# a slow store of principles, motifs, and the proposer strategy. Strength is
+# reinforced each generation and the weakest items are evicted over capacity.
+#
+# Hard rule: the model never recalls from memory. assemble_context is the only
+# method that hands back records, and it returns verbatim deepcopies. There is
+# no free query surface.
+# ---------------------------------------------------------------------------
+
+
+def _minmax_norm(x):
+    """Scale a vector to [0,1] across itself. Zeros if flat or empty."""
+    x = np.asarray(x, dtype=float)
+    if x.size == 0:
+        return x
+    lo = float(x.min())
+    hi = float(x.max())
+    if hi - lo <= 1e-12:
+        return np.zeros_like(x)
+    return (x - lo) / (hi - lo)
+
+
+class Memory:
+    """Reinforced store of alphas plus the slow store of distilled knowledge."""
+
+    def __init__(self):
+        self.items = {}  # key -> record
+        self.principles = []  # {text, keys}
+        self.motifs = []  # {fragment, strength, uses, avg_fitness}
+        self.strategy = {"text": "", "hit_rate": 0.0}
+
+    def add_or_update(self, key, expr, stats, predicted, error, gen,
+                      novelty=None, motifs=None, lesson=None):
+        """Upsert a record. Strength and uses survive updates."""
+        if key in self.items:
+            it = self.items[key]
+            it["expr"] = expr
+            it["stats"] = dict(stats)
+            it["predicted_sharpe"] = predicted
+            it["prediction_error"] = error
+            it["last_used_gen"] = gen
+            if novelty is not None:
+                it["novelty"] = novelty
+            if motifs is not None:
+                it["motifs"] = list(motifs)
+            if lesson is not None:
+                it["lesson"] = lesson
+        else:
+            self.items[key] = {
+                "key": key,
+                "expr": expr,
+                "stats": dict(stats),
+                "predicted_sharpe": predicted,
+                "prediction_error": error,
+                "strength": 0.0,
+                "uses": 0,
+                "created_gen": gen,
+                "last_used_gen": gen,
+                "novelty": 0.0 if novelty is None else novelty,
+                "motifs": [] if motifs is None else list(motifs),
+                "lesson": "" if lesson is None else lesson,
+            }
+        return self.items[key]
+
+    def reinforce(self, touched_keys, used_counts, gen, max_cap=300,
+                  decay=0.95, a=0.5, b=0.3, c=0.2):
+        """Update strength of touched items, then evict the weakest over cap."""
+        touched = [k for k in touched_keys if k in self.items]
+        if touched:
+            fit = [fitness(self.items[k]["stats"]) for k in touched]
+            used = [float(used_counts.get(k, 0)) for k in touched]
+            surp = [abs(self.items[k]["prediction_error"]) for k in touched]
+            nf = _minmax_norm(fit)
+            nu = _minmax_norm(used)
+            ns = _minmax_norm(surp)
+            for i, k in enumerate(touched):
+                it = self.items[k]
+                it["strength"] = it["strength"] * decay + (
+                    a * float(nf[i]) + b * float(nu[i]) + c * float(ns[i]))
+                it["uses"] += int(used_counts.get(k, 0))
+                it["last_used_gen"] = gen
+
+        evicted = []
+        while len(self.items) > max_cap:
+            k = min(self.items, key=lambda kk: (
+                self.items[kk]["strength"],
+                self.items[kk]["created_gen"],
+                kk))
+            evicted.append(k)
+            del self.items[k]
+        return evicted
+
+    def assemble_context(self):
+        """Deterministic retrieval. Verbatim deepcopies, the only recall path."""
+        items = list(self.items.values())
+
+        def top(metric, n):
+            ranked = sorted(items, key=lambda r: (-metric(r), r["key"]))
+            return [copy.deepcopy(r) for r in ranked[:n]]
+
+        motifs_ranked = sorted(
+            self.motifs,
+            key=lambda m: (-m.get("strength", 0.0), m.get("fragment", "")))
+        return {
+            "top_strength": top(lambda r: r["strength"], 8),
+            "top_novelty": top(lambda r: r.get("novelty", 0.0), 3),
+            "top_surprise": top(lambda r: abs(r.get("prediction_error", 0.0)), 3),
+            "principles": [copy.deepcopy(p) for p in self.principles],
+            "motifs": [copy.deepcopy(m) for m in motifs_ranked[:6]],
+        }
+
+    # Slow store mutators. Later modules (sleep, motif extraction) drive these.
+    def add_principle(self, text, keys):
+        self.principles.append({"text": text, "keys": list(keys)})
+
+    def add_motif(self, fragment, strength=0.0, uses=0, avg_fitness=0.0):
+        for m in self.motifs:
+            if m["fragment"] == fragment:
+                m["strength"] = strength
+                m["uses"] = uses
+                m["avg_fitness"] = avg_fitness
+                return m
+        m = {"fragment": fragment, "strength": strength,
+             "uses": uses, "avg_fitness": avg_fitness}
+        self.motifs.append(m)
+        return m
+
+    def set_strategy(self, text, hit_rate):
+        self.strategy = {"text": text, "hit_rate": hit_rate}
+
+    def save(self, path):
+        state = {
+            "items": self.items,
+            "principles": self.principles,
+            "motifs": self.motifs,
+            "strategy": self.strategy,
+        }
+        with open(path, "w") as f:
+            json.dump(state, f, indent=2)
+
+    @classmethod
+    def load(cls, path):
+        with open(path) as f:
+            state = json.load(f)
+        m = cls()
+        m.items = state.get("items", {})
+        m.principles = state.get("principles", [])
+        m.motifs = state.get("motifs", [])
+        m.strategy = state.get("strategy", {"text": "", "hit_rate": 0.0})
+        return m
+
+
 def load_yfinance_panel(seed=7):
     """Placeholder for the real market data loader.
 
@@ -397,11 +554,75 @@ def parse_args(argv=None):
     p.add_argument("--pop", type=int, default=56)
     p.add_argument("--weave", action="store_true")
     p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--selftest", action="store_true",
+                   help="run the Memory selftest and exit")
     return p.parse_args(argv)
+
+
+def memory_selftest():
+    """Exercise Memory: reinforce twice, show eviction, print assemble_context."""
+    m = Memory()
+
+    # Five fake items, A best down to E negative.
+    fakes = {
+        "A": dict(stats=dict(is_sharpe=2.0, oos_sharpe=1.8, turnover=0.5, size=4, ic=0.030),
+                  predicted=1.5, error=0.5, novelty=0.20),
+        "B": dict(stats=dict(is_sharpe=1.5, oos_sharpe=1.2, turnover=0.7, size=6, ic=0.020),
+                  predicted=1.8, error=-0.3, novelty=0.50),
+        "C": dict(stats=dict(is_sharpe=1.0, oos_sharpe=0.9, turnover=0.4, size=3, ic=0.015),
+                  predicted=0.2, error=0.8, novelty=0.90),
+        "D": dict(stats=dict(is_sharpe=0.3, oos_sharpe=0.1, turnover=1.5, size=9, ic=0.005),
+                  predicted=0.4, error=-0.1, novelty=0.10),
+        "E": dict(stats=dict(is_sharpe=-0.2, oos_sharpe=-0.1, turnover=2.0, size=12, ic=-0.010),
+                  predicted=0.0, error=-0.2, novelty=0.05),
+    }
+    for k, f in fakes.items():
+        m.add_or_update(k, ["neg", k.lower()], f["stats"], f["predicted"],
+                        f["error"], gen=0, novelty=f["novelty"], lesson=f"lesson {k}")
+
+    # A little slow store so assemble_context has something to return.
+    m.add_principle("short recent winners, the reversal pays", keys=["A", "C"])
+    m.add_motif("ts_mean(returns, 2)", strength=0.9, uses=4, avg_fitness=1.3)
+    m.add_motif("cs_rank", strength=0.6, uses=7, avg_fitness=0.8)
+    m.set_strategy("favor low turnover reversals on returns", hit_rate=0.42)
+
+    def show_strengths(label):
+        order = sorted(m.items.values(), key=lambda r: (-r["strength"], r["key"]))
+        print(label)
+        for r in order:
+            print(f"  {r['key']}  strength {r['strength']:.4f}  uses {r['uses']}")
+
+    # Reinforce one: touch all five, no eviction.
+    m.reinforce(["A", "B", "C", "D", "E"],
+                {"A": 3, "B": 2, "C": 1, "D": 1, "E": 0}, gen=1, max_cap=300)
+    show_strengths("after reinforce 1 (touch all, max_cap 300):")
+
+    # Reinforce two: touch A,B,C only, cap at 3 so the two weakest are evicted.
+    evicted = m.reinforce(["A", "B", "C"],
+                          {"A": 2, "B": 1, "C": 1}, gen=2, max_cap=3)
+    show_strengths("after reinforce 2 (touch A,B,C, max_cap 3):")
+    print(f"evicted: {evicted}")
+
+    print("assemble_context:")
+    ctx = m.assemble_context()
+    summary = {
+        "top_strength": [(r["key"], round(r["strength"], 4)) for r in ctx["top_strength"]],
+        "top_novelty": [(r["key"], r["novelty"]) for r in ctx["top_novelty"]],
+        "top_surprise": [(r["key"], abs(r["prediction_error"])) for r in ctx["top_surprise"]],
+        "principles": ctx["principles"],
+        "motifs": [(mo["fragment"], mo["strength"]) for mo in ctx["motifs"]],
+    }
+    print(json.dumps(summary, indent=2))
+    print("full top_strength record (verbatim):")
+    print(json.dumps(ctx["top_strength"][0], indent=2))
 
 
 def main(argv=None):
     args = parse_args(argv)
+
+    if args.selftest:
+        memory_selftest()
+        return
 
     print("config:")
     print(f"  mode        {args.mode}")

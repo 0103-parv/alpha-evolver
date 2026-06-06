@@ -9,6 +9,7 @@ import argparse
 import copy
 import json
 import math
+import random
 import warnings
 
 import numpy as np
@@ -524,6 +525,113 @@ class Memory:
         return m
 
 
+# ---------------------------------------------------------------------------
+# The offline proposer: genetic operators over the DSL.
+#
+# rand_expr grows a fresh tree, mutate swaps one subexpression for a fresh one,
+# crossover grafts a subexpression from b into a. propose_offline reads the
+# verbatim context from Memory and breeds k valid alphas, biasing parents toward
+# strength. Everything is filtered through valid() before it leaves.
+# ---------------------------------------------------------------------------
+
+MAX_DEPTH = 4
+
+
+def rand_expr(depth):
+    """Sample a valid expression. depth is the remaining level budget."""
+    if depth <= 1:
+        return random.choice(FIELDS)
+    # Favor operators over bare leaves so trees are not mostly fields.
+    cat = random.choices(
+        ["leaf", "unary", "binary", "cs", "ts"], weights=[1, 2, 2, 2, 3])[0]
+    if cat == "leaf":
+        return random.choice(FIELDS)
+    if cat == "unary":
+        return [random.choice(UNARY), rand_expr(depth - 1)]
+    if cat == "binary":
+        return [random.choice(BINARY), rand_expr(depth - 1), rand_expr(depth - 1)]
+    if cat == "cs":
+        return [random.choice(CS_OPS), rand_expr(depth - 1)]
+    return [random.choice(TS_OPS), rand_expr(depth - 1), random.choice(WINDOWS)]
+
+
+def _positions(node, prefix=()):
+    """Paths to every subexpression. Window ints are never positions."""
+    paths = [prefix]
+    if isinstance(node, list):
+        op = node[0]
+        if op in BINARY:
+            paths += _positions(node[1], prefix + (1,))
+            paths += _positions(node[2], prefix + (2,))
+        elif op in UNARY or op in CS_OPS or op in TS_OPS:
+            paths += _positions(node[1], prefix + (1,))
+    return paths
+
+
+def _get(node, path):
+    cur = node
+    for i in path:
+        cur = cur[i]
+    return cur
+
+
+def _set(node, path, value):
+    """Functional replace at path. Never mutates the input."""
+    if not path:
+        return value
+    new = copy.deepcopy(node)
+    cur = new
+    for i in path[:-1]:
+        cur = cur[i]
+    cur[path[-1]] = value
+    return new
+
+
+def mutate(node):
+    """Replace one real subexpression position with a fresh rand_expr."""
+    path = random.choice(_positions(node))
+    repl = rand_expr(max(1, MAX_DEPTH - len(path)))
+    return _set(node, path, repl)
+
+
+def crossover(a, b):
+    """Graft a random subexpression from b into a real position of a."""
+    donor = copy.deepcopy(_get(b, random.choice(_positions(b))))
+    return _set(a, random.choice(_positions(a)), donor)
+
+
+def _pick_elite(elites):
+    """Pick a parent expr, biased toward higher strength."""
+    weights = [max(0.0, r.get("strength", 0.0)) + 1e-6 for r in elites]
+    return random.choices(elites, weights=weights, k=1)[0]["expr"]
+
+
+def propose_offline(context, k, explore):
+    """Breed k valid alphas from the context. The offline (no LLM) proposer."""
+    elites = context.get("top_strength", [])
+
+    def one():
+        r = random.random()
+        if r < explore or not elites:
+            return rand_expr(random.randint(2, MAX_DEPTH))
+        if r < explore + 0.30:
+            return crossover(_pick_elite(elites), _pick_elite(elites))
+        return mutate(_pick_elite(elites))
+
+    out = []
+    for _ in range(k * 20):
+        if len(out) >= k:
+            break
+        cand = one()
+        if valid(cand):
+            out.append(cand)
+    while len(out) < k:
+        cand = rand_expr(random.randint(2, MAX_DEPTH))
+        if valid(cand):
+            out.append(cand)
+    return out[:k]
+
+
 def load_yfinance_panel(seed=7):
     """Placeholder for the real market data loader.
 
@@ -624,6 +732,8 @@ def main(argv=None):
         memory_selftest()
         return
 
+    random.seed(args.seed)
+
     print("config:")
     print(f"  mode        {args.mode}")
     print(f"  data        {args.data}")
@@ -678,6 +788,14 @@ def main(argv=None):
     print(f"  size        {stats['size']}")
     print(f"  ic          {stats['ic']:+.4f}")
     print(f"  fitness     {fitness(stats):+.3f}")
+
+    # Proposer demo: breed 10 valid alphas from an empty context.
+    ctx = {"top_strength": []}
+    alphas = propose_offline(ctx, 10, explore=0.5)
+    print("propose (empty context, k=10, explore=0.5):")
+    print(f"  all valid   {all(valid(x) for x in alphas)}  count {len(alphas)}")
+    for x in alphas:
+        print(f"  {to_str(x)}")
 
 
 if __name__ == "__main__":

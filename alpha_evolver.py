@@ -295,6 +295,78 @@ def ev(node, F):
     raise ValueError(f"unknown op {op}")
 
 
+# ---------------------------------------------------------------------------
+# The backtest: the honest no lookahead verifier.
+#
+# Weights are dollar neutral and gross 1 each day. Weights formed on day t earn
+# fwd_ret at day t, which is ret[t+1], so nothing reads the future. Headline
+# skill is out of sample Sharpe (last slice); the search optimizes in sample.
+# ---------------------------------------------------------------------------
+
+
+def _sharpe(r):
+    """Annualized Sharpe of a daily return series. 0 if degenerate."""
+    if r.size == 0:
+        return 0.0
+    sd = float(np.std(r))
+    if sd == 0.0 or not np.isfinite(sd):
+        return 0.0
+    return float(np.mean(r) / sd * math.sqrt(252.0))
+
+
+def _row_corr(a, b):
+    """Per day cross sectional Pearson correlation. Nan where a row is flat."""
+    a = a - a.mean(axis=1, keepdims=True)
+    b = b - b.mean(axis=1, keepdims=True)
+    num = (a * b).sum(axis=1)
+    den = np.sqrt((a * a).sum(axis=1) * (b * b).sum(axis=1))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        c = num / den
+    c[den == 0] = np.nan
+    return c
+
+
+def backtest(node, F, split, cost=0.0001):
+    """Evaluate node and score it. Returns the stats dict from CLAUDE.md."""
+    fwd = np.asarray(F["fwd_ret"], dtype=float)
+    sig = np.nan_to_num(ev(node, F), nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Dollar neutral each day, then scale to gross 1.
+    w = sig - sig.mean(axis=1, keepdims=True)
+    gross = np.abs(w).sum(axis=1, keepdims=True)
+    safe = gross.copy()
+    safe[safe == 0.0] = 1.0
+    w = w / safe
+
+    # Weights at day t earn fwd_ret at day t, which is ret[t+1].
+    port = (w * fwd).sum(axis=1)
+
+    # Turnover is the one way fraction of the book traded, half the L1 weight
+    # change. Prior weights are zero before day 0.
+    w_prev = np.vstack([np.zeros((1, w.shape[1])), w[:-1]])
+    turnover = 0.5 * np.abs(w - w_prev).sum(axis=1)
+
+    net = port - cost * turnover
+
+    corr = _row_corr(sig, fwd)
+    ic = float(np.nanmean(corr)) if np.isfinite(corr).any() else 0.0
+
+    return {
+        "is_sharpe": _sharpe(net[:split]),
+        "oos_sharpe": _sharpe(net[split:]),
+        "turnover": float(turnover.mean()),
+        "size": size(node),
+        "ic": ic,
+    }
+
+
+def fitness(stats):
+    """Search objective. In sample Sharpe with soft turnover and size penalties."""
+    return (stats["is_sharpe"]
+            - 0.10 * max(0.0, stats["turnover"] - 1.0)
+            - 0.02 * stats["size"])
+
+
 def load_yfinance_panel(seed=7):
     """Placeholder for the real market data loader.
 
@@ -370,6 +442,21 @@ def main(argv=None):
     print(f"  size        {size(expr)}")
     print(f"  out shape   {out.shape}")
     print(f"  non finite  {nonfinite}")
+
+    # Backtest demo on a 2 day reversal signal.
+    T = panel["returns"].shape[0]
+    split = int(0.70 * T)
+    node = ["neg", ["ts_mean", "returns", 2]]
+    stats = backtest(node, panel, split)
+    print("backtest:")
+    print(f"  expr        {to_str(node)}")
+    print(f"  split       {split}")
+    print(f"  is_sharpe   {stats['is_sharpe']:+.3f}")
+    print(f"  oos_sharpe  {stats['oos_sharpe']:+.3f}")
+    print(f"  turnover    {stats['turnover']:.3f}")
+    print(f"  size        {stats['size']}")
+    print(f"  ic          {stats['ic']:+.4f}")
+    print(f"  fitness     {fitness(stats):+.3f}")
 
 
 if __name__ == "__main__":

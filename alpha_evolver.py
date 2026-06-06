@@ -7,10 +7,13 @@ on numpy alone; every other dependency is optional and guarded.
 
 import argparse
 import copy
+import csv
 import json
 import math
+import os
 import random
 import warnings
+from collections import Counter
 
 import numpy as np
 
@@ -726,11 +729,171 @@ def load_yfinance_panel(seed=7):
     )
 
 
-def build_panel(args):
+def build_panel(data, seed):
     """Pick a data source and return the panel dict."""
-    if args.data == "synthetic":
-        return synthetic_panel(seed=args.seed)
-    return load_yfinance_panel(seed=args.seed)
+    if data == "synthetic":
+        return synthetic_panel(seed=seed)
+    return load_yfinance_panel(seed=seed)
+
+
+# ---------------------------------------------------------------------------
+# The evolution loop: propose, verify, store, reinforce, breed.
+# ---------------------------------------------------------------------------
+
+
+def explore_schedule(g, generations, floor=0.10):
+    """Exploration rate by generation. Temporary linear decay to a floor."""
+    return max(floor, 0.45 * (1 - g / max(1, generations - 1)))
+
+
+def _write_history(path, history):
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["gen", "best_oos_so_far", "best_oos_gen",
+                    "median_oos", "explore", "mem_size"])
+        for row in history:
+            w.writerow(row)
+
+
+def _save_curve(path, history):
+    if not HAVE_MATPLOTLIB:
+        print(f"  (matplotlib missing, skipped {path})")
+        return
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    gens = [h[0] for h in history]
+    best = [h[1] for h in history]
+    median = [h[3] for h in history]
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(gens, best, marker="o", label="best oos so far")
+    ax.plot(gens, median, marker=".", label="median oos")
+    ax.set_xlabel("generation")
+    ax.set_ylabel("oos sharpe")
+    ax.set_title("Alpha Evolver learning curve")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.savefig(path, dpi=100, bbox_inches="tight")
+    plt.close(fig)
+
+
+def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
+        weave=False, elite_n=10, cost=0.0001, mem_path="memory.json",
+        history_path="history.csv", curve_path="learning_curve.png"):
+    """The generational search. Returns a summary dict."""
+    random.seed(seed)
+    panel = build_panel(data, seed)
+    T = panel["returns"].shape[0]
+    split = int(0.70 * T)
+
+    memory = Memory.load(mem_path) if os.path.exists(mem_path) else Memory()
+
+    if weave and HAVE_WEAVE:
+        try:
+            weave.init("alpha-evolver")
+        except Exception as e:
+            print(f"  (weave init failed: {e})")
+            weave = False
+
+    print(f"run  mode {mode}  data {data}  gens {generations}  pop {pop}  "
+          f"seed {seed}  mem0 {len(memory.items)}")
+
+    # Initial population: carry over elites from memory, top up with proposals.
+    ctx = memory.assemble_context()
+    population = [copy.deepcopy(r["expr"]) for r in ctx["top_strength"]][:pop]
+    if len(population) < pop:
+        population += propose_offline(
+            ctx, pop - len(population), explore_schedule(0, generations))
+
+    bt_cache = {}
+    used_as_parent = Counter()
+    hof = {}
+    history = []
+    best_oos_so_far = float("-inf")
+    best_alpha = None
+
+    for g in range(generations):
+        explore = explore_schedule(g, generations)
+
+        # 1. Evaluate every valid individual, dedup by canonical key.
+        evaluated = {}
+        for ind in population:
+            if not valid(ind):
+                continue
+            key = to_str(ind)
+            if key in evaluated:
+                continue
+            if key not in bt_cache:
+                bt_cache[key] = backtest(ind, panel, split, cost)
+            stats = bt_cache[key]
+            evaluated[key] = {"key": key, "expr": ind, "stats": stats,
+                              "fitness": fitness(stats)}
+
+        # 2. Store every verified result.
+        for rec in evaluated.values():
+            memory.add_or_update(rec["key"], rec["expr"], rec["stats"],
+                                 predicted=None, error=0, gen=g)
+
+        # 3. Rank by fitness, take the elite.
+        ranked = sorted(evaluated.values(),
+                        key=lambda r: (-r["fitness"], r["key"]))
+        elites = ranked[:elite_n]
+
+        # 4. Critic on the elite: passers to hall of fame, rejects to lessons.
+        for e in elites:
+            ok, lesson = critic_offline(e["expr"], e["stats"])
+            if ok:
+                hof[e["key"]] = e
+            else:
+                memory.note_lesson(lesson, g)
+
+        # 5. Reinforce. Elites are the parent pool, so bump their parent use.
+        for e in elites:
+            used_as_parent[e["key"]] += 1
+        touched = list(evaluated.keys())
+        used_counts = {k: used_as_parent.get(k, 0) for k in touched}
+        memory.reinforce(touched, used_counts, g)
+        memory.decay_lessons()
+
+        # 6. Log.
+        oos = [r["stats"]["oos_sharpe"] for r in evaluated.values()]
+        gen_best = max(oos)
+        median_oos = float(np.median(oos))
+        gen_best_rec = max(evaluated.values(),
+                           key=lambda r: r["stats"]["oos_sharpe"])
+        if gen_best > best_oos_so_far:
+            best_oos_so_far = gen_best
+            best_alpha = gen_best_rec
+        history.append((g, round(best_oos_so_far, 4), round(gen_best, 4),
+                        round(median_oos, 4), round(explore, 4),
+                        len(memory.items)))
+        print(f"gen {g:02d}  best_oos {best_oos_so_far:+.3f}  "
+              f"median {median_oos:+.3f}  explore {explore:.2f}  "
+              f"mem {len(memory.items):3d}  | {best_alpha['key']}")
+        if weave and HAVE_WEAVE:
+            try:
+                weave.log({"gen": g, "best_oos": best_oos_so_far,
+                           "median_oos": median_oos, "explore": explore})
+            except Exception:
+                pass
+
+        # 7. Breed the next population: elites plus fresh proposals.
+        elite_exprs = [copy.deepcopy(e["expr"]) for e in elites]
+        ctx = memory.assemble_context()
+        children = propose_offline(ctx, pop - len(elite_exprs), explore)
+        population = elite_exprs + children
+
+    memory.save(mem_path)
+    _write_history(history_path, history)
+    _save_curve(curve_path, history)
+
+    bs = best_alpha["stats"]
+    print(f"best alpha  oos {bs['oos_sharpe']:+.3f}  is {bs['is_sharpe']:+.3f}  "
+          f"turnover {bs['turnover']:.3f}  size {bs['size']}  | {best_alpha['key']}")
+    print(f"saved {mem_path} ({len(memory.items)} items), "
+          f"{history_path}, {curve_path}.  hof {len(hof)}")
+
+    return {"best_oos": best_oos_so_far, "best_key": best_alpha["key"],
+            "history": history, "memory": memory, "hof": hof}
 
 
 def parse_args(argv=None):
@@ -812,94 +975,8 @@ def main(argv=None):
         memory_selftest()
         return
 
-    random.seed(args.seed)
-
-    print("config:")
-    print(f"  mode        {args.mode}")
-    print(f"  data        {args.data}")
-    print(f"  generations {args.generations}")
-    print(f"  pop         {args.pop}")
-    print(f"  weave       {args.weave}")
-    print(f"  seed        {args.seed}")
-
-    panel = build_panel(args)
-
-    print("panel:")
-    for name in PANEL_FIELDS:
-        print(f"  {name:8s} {panel[name].shape}")
-
-    # Quick sanity on the planted edges. Not part of acceptance, just a check
-    # that the reversal and volume edge are present in the generated data.
-    ret = panel["returns"]
-    fwd = panel["fwd_ret"]
-    flat_r = ret[:-1].ravel()
-    flat_next = ret[1:].ravel()
-    ac1 = float(np.corrcoef(flat_r, flat_next)[0, 1])
-    vol = panel["volume"]
-    flat_vol = vol[:-1].ravel()
-    flat_fwd = fwd[:-1].ravel()
-    vol_edge = float(np.corrcoef(flat_vol, -flat_fwd)[0, 1])
-    print("sanity:")
-    print(f"  lag1 return autocorr {ac1:+.4f}  (reversal, want negative)")
-    print(f"  corr(volume, -fwd)   {vol_edge:+.4f}  (volume edge, want positive)")
-
-    # DSL demo: validate, print, evaluate one expression on the panel.
-    expr = ["cs_rank", ["neg", ["ts_mean", "returns", 2]]]
-    out = ev(expr, panel)
-    nonfinite = int((~np.isfinite(out)).sum())
-    print("dsl:")
-    print(f"  valid       {valid(expr)}")
-    print(f"  expr        {to_str(expr)}")
-    print(f"  size        {size(expr)}")
-    print(f"  out shape   {out.shape}")
-    print(f"  non finite  {nonfinite}")
-
-    # Backtest demo on a 2 day reversal signal.
-    T = panel["returns"].shape[0]
-    split = int(0.70 * T)
-    node = ["neg", ["ts_mean", "returns", 2]]
-    stats = backtest(node, panel, split)
-    print("backtest:")
-    print(f"  expr        {to_str(node)}")
-    print(f"  split       {split}")
-    print(f"  is_sharpe   {stats['is_sharpe']:+.3f}")
-    print(f"  oos_sharpe  {stats['oos_sharpe']:+.3f}")
-    print(f"  turnover    {stats['turnover']:.3f}")
-    print(f"  size        {stats['size']}")
-    print(f"  ic          {stats['ic']:+.4f}")
-    print(f"  fitness     {fitness(stats):+.3f}")
-
-    # Proposer demo: breed 10 valid alphas from an empty context.
-    ctx = {"top_strength": []}
-    alphas = propose_offline(ctx, 10, explore=0.5)
-    print("propose (empty context, k=10, explore=0.5):")
-    print(f"  all valid   {all(valid(x) for x in alphas)}  count {len(alphas)}")
-    for x in alphas:
-        print(f"  {to_str(x)}")
-
-    # Critic demo: a deliberately overfit alpha is rejected with a lesson, and
-    # the lesson is reinforced by frequency in memory.
-    overfit_node = ["ts_zscore", "close", 20]
-    overfit_stats = {"is_sharpe": 3.0, "oos_sharpe": 0.1, "turnover": 2.0, "size": 6}
-    ok, lesson = critic_offline(overfit_node, overfit_stats)
-    good_ok, _ = critic_offline(node, stats)
-    print("critic:")
-    print(f"  overfit expr {to_str(overfit_node)}")
-    print(f"  ok           {ok}")
-    print(f"  lesson       {lesson}")
-    print(f"  good alpha ok {good_ok}  ({to_str(node)})")
-
-    mem = Memory()
-    for _ in range(3):
-        mem.note_lesson(lesson, gen=1)
-    mem.note_lesson("cs_rank on volume, turnover too high, churns the book", gen=1)
-    print("  top_lessons (3 hits on the overfit pattern, 1 on the churn one):")
-    for r in mem.assemble_context()["top_lessons"]:
-        print(f"    strength {r['strength']:.3f}  uses {r['uses']}  {r['text']}")
-    mem.decay_lessons()
-    print("  top_lessons (after one decay):")
-    for r in mem.assemble_context()["top_lessons"]:
-        print(f"    strength {r['strength']:.3f}  uses {r['uses']}  {r['text']}")
+    run(generations=args.generations, pop=args.pop, seed=args.seed,
+        data=args.data, mode=args.mode, weave=args.weave)
 
 
 if __name__ == "__main__":

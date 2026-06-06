@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+.env
+memory.json
+*.png
+*.csv
+wandb/
+.weave_log/

@@ -402,6 +402,7 @@ class Memory:
         self.items = {}  # key -> record
         self.principles = []  # {text, keys}
         self.motifs = []  # {fragment, strength, uses, avg_fitness}
+        self.lessons = {}  # lesson text -> anti pattern record
         self.strategy = {"text": "", "hit_rate": 0.0}
 
     def add_or_update(self, key, expr, stats, predicted, error, gen,
@@ -476,13 +477,40 @@ class Memory:
         motifs_ranked = sorted(
             self.motifs,
             key=lambda m: (-m.get("strength", 0.0), m.get("fragment", "")))
+        lessons_ranked = sorted(
+            self.lessons.values(),
+            key=lambda r: (-r["strength"], r["key"]))
         return {
             "top_strength": top(lambda r: r["strength"], 8),
             "top_novelty": top(lambda r: r.get("novelty", 0.0), 3),
             "top_surprise": top(lambda r: abs(r.get("prediction_error", 0.0)), 3),
             "principles": [copy.deepcopy(p) for p in self.principles],
             "motifs": [copy.deepcopy(m) for m in motifs_ranked[:6]],
+            "top_lessons": [copy.deepcopy(r) for r in lessons_ranked[:3]],
         }
+
+    def note_lesson(self, lesson, gen, bump=1.0):
+        """Record an anti pattern. Frequency reinforces its strength."""
+        if lesson in self.lessons:
+            it = self.lessons[lesson]
+            it["strength"] += bump
+            it["uses"] += 1
+            it["last_used_gen"] = gen
+        else:
+            self.lessons[lesson] = {
+                "key": lesson,
+                "text": lesson,
+                "strength": bump,
+                "uses": 1,
+                "created_gen": gen,
+                "last_used_gen": gen,
+            }
+        return self.lessons[lesson]
+
+    def decay_lessons(self, decay=0.95):
+        """Fade every anti pattern one generation. Stale ones sink."""
+        for it in self.lessons.values():
+            it["strength"] *= decay
 
     # Slow store mutators. Later modules (sleep, motif extraction) drive these.
     def add_principle(self, text, keys):
@@ -508,6 +536,7 @@ class Memory:
             "items": self.items,
             "principles": self.principles,
             "motifs": self.motifs,
+            "lessons": self.lessons,
             "strategy": self.strategy,
         }
         with open(path, "w") as f:
@@ -521,6 +550,7 @@ class Memory:
         m.items = state.get("items", {})
         m.principles = state.get("principles", [])
         m.motifs = state.get("motifs", [])
+        m.lessons = state.get("lessons", {})
         m.strategy = state.get("strategy", {"text": "", "hit_rate": 0.0})
         return m
 
@@ -632,6 +662,55 @@ def propose_offline(context, k, explore):
     return out[:k]
 
 
+# ---------------------------------------------------------------------------
+# The critic: a cheap offline gate that rejects known failure shapes before the
+# backtest is even trusted. Rejections become anti pattern lessons in memory.
+# ---------------------------------------------------------------------------
+
+PRICE_FIELDS = ("open", "high", "low", "close")
+
+
+def _antipattern_fragment(node):
+    """A generalized descriptor of node, so similar rejections share a lesson."""
+    price_hits, vol_hits = [], []
+
+    def walk(n):
+        if not isinstance(n, list):
+            return
+        op = n[0]
+        for c in n[1:]:
+            if c in PRICE_FIELDS:
+                price_hits.append(f"{op} on price level")
+            elif c == "volume":
+                vol_hits.append(f"{op} on volume")
+        for c in n[1:]:
+            walk(c)
+
+    walk(node)
+    if price_hits:
+        return price_hits[0]
+    if vol_hits:
+        return vol_hits[0]
+    if isinstance(node, list):
+        return f"{node[0]} structure"
+    return f"raw {node} level"
+
+
+def critic_offline(node, stats):
+    """Gate an alpha. Returns (ok, lesson). lesson is empty when ok."""
+    reasons = []
+    if (stats["is_sharpe"] - stats["oos_sharpe"]) > 1.0 and stats["oos_sharpe"] < 0.3:
+        reasons.append("large IS to OOS gap, likely fitted")
+    if stats["turnover"] > 5:
+        reasons.append("turnover too high, churns the book")
+    if stats["size"] > 12:
+        reasons.append("tree too large, too complex")
+    if not reasons:
+        return True, ""
+    lesson = f"{_antipattern_fragment(node)}, " + "; ".join(reasons)
+    return False, lesson
+
+
 def load_yfinance_panel(seed=7):
     """Placeholder for the real market data loader.
 
@@ -719,6 +798,7 @@ def memory_selftest():
         "top_surprise": [(r["key"], abs(r["prediction_error"])) for r in ctx["top_surprise"]],
         "principles": ctx["principles"],
         "motifs": [(mo["fragment"], mo["strength"]) for mo in ctx["motifs"]],
+        "top_lessons": [(r["text"], r["strength"]) for r in ctx["top_lessons"]],
     }
     print(json.dumps(summary, indent=2))
     print("full top_strength record (verbatim):")
@@ -796,6 +876,30 @@ def main(argv=None):
     print(f"  all valid   {all(valid(x) for x in alphas)}  count {len(alphas)}")
     for x in alphas:
         print(f"  {to_str(x)}")
+
+    # Critic demo: a deliberately overfit alpha is rejected with a lesson, and
+    # the lesson is reinforced by frequency in memory.
+    overfit_node = ["ts_zscore", "close", 20]
+    overfit_stats = {"is_sharpe": 3.0, "oos_sharpe": 0.1, "turnover": 2.0, "size": 6}
+    ok, lesson = critic_offline(overfit_node, overfit_stats)
+    good_ok, _ = critic_offline(node, stats)
+    print("critic:")
+    print(f"  overfit expr {to_str(overfit_node)}")
+    print(f"  ok           {ok}")
+    print(f"  lesson       {lesson}")
+    print(f"  good alpha ok {good_ok}  ({to_str(node)})")
+
+    mem = Memory()
+    for _ in range(3):
+        mem.note_lesson(lesson, gen=1)
+    mem.note_lesson("cs_rank on volume, turnover too high, churns the book", gen=1)
+    print("  top_lessons (3 hits on the overfit pattern, 1 on the churn one):")
+    for r in mem.assemble_context()["top_lessons"]:
+        print(f"    strength {r['strength']:.3f}  uses {r['uses']}  {r['text']}")
+    mem.decay_lessons()
+    print("  top_lessons (after one decay):")
+    for r in mem.assemble_context()["top_lessons"]:
+        print(f"    strength {r['strength']:.3f}  uses {r['uses']}  {r['text']}")
 
 
 if __name__ == "__main__":

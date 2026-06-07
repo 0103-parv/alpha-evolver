@@ -3,6 +3,7 @@ __pycache__/
 .env
 memory.json
 *.png
+!learning_curve.png
 *.csv
 wandb/
 .weave_log/

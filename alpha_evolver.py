@@ -459,8 +459,11 @@ class Memory:
         if touched:
             fit = [fitness(self.items[k]["stats"]) for k in touched]
             used = [float(used_counts.get(k, 0)) for k in touched]
-            surp = [min(abs(self.items[k]["prediction_error"]) / max(self.pe_scale, 1e-6), 1.0)
-                    for k in touched]
+            errors = [
+                abs(float(self.items[k].get("prediction_error", 0.0)))
+                for k in touched
+            ]
+            surp = [min(error / max(self.pe_scale, 1e-6), 1.0) for error in errors]
             novel = [self.items[k].get("novelty", 0.0) for k in touched]
             nf = _minmax_norm(fit)
             nu = _minmax_norm(used)
@@ -1091,12 +1094,14 @@ def sleep(memory, panel, model=None, mode="offline"):
     for i in range(0, len(ranked) - 1, 2):
         child = crossover(ranked[i]["expr"], ranked[i + 1]["expr"])
         if valid(child):
+            predicted = _predict_sharpe(memory.assemble_context())
             stats = backtest(child, panel, split)
+            error = stats["oos_sharpe"] - predicted
             ok, lesson = critic_offline(child, stats)
             if ok:
                 key = to_str(child)
-                memory.add_or_update(key, child, stats, predicted=0.0,
-                                     error=stats["oos_sharpe"], gen=-1,
+                memory.add_or_update(key, child, stats, predicted=predicted,
+                                     error=error, gen=-1,
                                      novelty=novelty(child, hof),
                                      motifs=subexpressions(child))
                 offspring.append((key, stats))
@@ -1240,12 +1245,12 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
             key = to_str(ind)
             if key in evaluated:
                 continue
+            pred = baseline_pred
+            if key in memory.items:
+                pred = memory.items[key]["stats"]["oos_sharpe"]
             if key not in bt_cache:
                 bt_cache[key] = backtest(ind, panel, split, cost)
             stats = bt_cache[key]
-            pred = baseline_pred
-            if key in memory.items:
-                pred = memory.items[key].get("stats", {}).get("oos_sharpe", baseline_pred)
             error = stats["oos_sharpe"] - pred
             pe_vals.append(abs(error))
             evaluated[key] = {"key": key, "expr": ind, "stats": stats,
@@ -1310,7 +1315,7 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
                         len(memory.items), round(mean_abs_pe, 4),
                         round(sigma_t, 4), n_stall, round(hit_rate, 4)))
         print(f"gen {g:02d}  best_oos {best_oos_so_far:+.3f}  "
-              f"median {median_oos:+.3f}  pe {mean_abs_pe:.3f}  "
+              f"median {median_oos:+.3f}  mean_abs_pe {mean_abs_pe:.3f}  "
               f"sigma {sigma_t:.3f}  stall {n_stall:02d}  explore {explore:.2f}  "
               f"hit {hit_rate:.2f}  strat v{memory.strategy.get('version', 0)}  "
               f"mem {len(memory.items):3d}  | {best_alpha['key']}")

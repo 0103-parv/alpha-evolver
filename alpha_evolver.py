@@ -115,6 +115,50 @@ def synthetic_panel(T=1300, N=40, seed=7):
     }
 
 
+def adversarial_panel(seed=7, T=1300, N=40):
+    """A clean panel with an IN SAMPLE overfit trap.
+
+    A spurious link between a simple price feature (yesterday's cross sectional
+    rank of close) and the next return is injected ONLY into the first 70 percent
+    (the slice the search optimizes on), plus a few extreme in sample jackpot
+    days. Alphas that latch onto it look strong in sample but the edge is absent
+    out of sample and on any clean panel, so they are classic overfit: high in
+    sample Sharpe, weak out of sample. A robust memory should refuse to trust
+    them; a memory without the firewall fills up with edges that vanish on fresh
+    data and then breeds from them. The real reversal and volume edges still live
+    in both slices, so a clean discovery is always available.
+    """
+    panel = synthetic_panel(T=T, N=N, seed=seed)
+    rng = np.random.default_rng(seed + 9973)
+    ret = panel["returns"].copy()
+    Tn, Nn = ret.shape
+    split = int(0.70 * Tn)
+
+    # Spurious feature: yesterday's cross sectional rank of close, centered to +-0.5.
+    rank = np.argsort(np.argsort(panel["close"], axis=1), axis=1).astype(float)
+    feat = rank / max(Nn - 1, 1) - 0.5
+
+    # In sample only spurious reversal on the feature. It does not persist out of
+    # sample, so fitting it is overfitting.
+    ret[1:split] += 0.016 * feat[0:split - 1]
+
+    # A few extreme in sample jackpot days: huge feature aligned moves that make
+    # some fitted alphas look spectacular, the kind of extreme surprise the
+    # inverted U is meant to distrust rather than chase.
+    jackpots = rng.choice(np.arange(1, split), size=8, replace=False)
+    ret[jackpots] += 0.06 * feat[jackpots - 1]
+
+    # Rebuild every dependent field so there is no lookahead and validation passes.
+    close = 100.0 * np.cumprod(1.0 + ret, axis=0)
+    open_ = close / (1.0 + ret)
+    high = np.maximum(open_, close) * (1.0 + 0.5 * np.abs(ret))
+    low = np.minimum(open_, close) * (1.0 - 0.5 * np.abs(ret))
+    fwd_ret = np.zeros_like(ret)
+    fwd_ret[:-1] = ret[1:]
+    return {"open": open_, "high": high, "low": low, "close": close,
+            "volume": panel["volume"], "returns": ret, "fwd_ret": fwd_ret}
+
+
 # ---------------------------------------------------------------------------
 # The DSL: a sandboxed S expression language for alphas.
 #
@@ -414,6 +458,38 @@ MAX_HOF = 300
 MAX_BT_CACHE = 6000
 MAX_LESSONS = 256
 CHECKPOINT_EVERY = 25  # save memory + history mid run so long runs are crash safe
+LP_WINDOW = 10         # outcomes kept per motif for the learning progress signal
+MAX_LP_MOTIFS = 256    # bound the learning progress table
+
+# Ablation knobs. "ours" is the full system; each baseline isolates one
+# mechanism so we can test what actually helps rather than assume it.
+#   surprise: none | monotonic (reward |error| linearly, Surprise Search style)
+#             | inverted_u (productive_surprise: reward moderate, distrust extreme)
+#   quarantine: gate untrusted / extreme ideas out of durable memory and parenting
+#   modes: dream / focus / recover switching   lineage: block failing families
+#   learning_progress: curiosity toward operators whose outcomes are still rising.
+#     Tested and left OFF: on this convergent benchmark it does not improve quality
+#     and slows discovery (see POSITIONING.md). Kept as the `with_lp` variant since
+#     learning progress is expected to matter more in open ended tasks.
+DEFAULT_CFG = {"surprise": "inverted_u", "novelty": True, "quarantine": True,
+               "modes": True, "lineage": True, "learning_progress": False}
+VARIANTS = {
+    "ours": dict(DEFAULT_CFG),
+    "plain": {"surprise": "none", "novelty": False, "quarantine": False,
+              "modes": False, "lineage": False, "learning_progress": False},
+    "novelty": {"surprise": "none", "novelty": True, "quarantine": False,
+                "modes": False, "lineage": False, "learning_progress": False},
+    "surprise_mono": {"surprise": "monotonic", "novelty": False,
+                      "quarantine": False, "modes": False, "lineage": False,
+                      "learning_progress": False},
+    "surprise_noquar": {"surprise": "inverted_u", "novelty": True,
+                        "quarantine": False, "modes": True, "lineage": True,
+                        "learning_progress": False},
+    "quar_mono": {"surprise": "monotonic", "novelty": True, "quarantine": True,
+                  "modes": True, "lineage": True, "learning_progress": False},
+    "with_lp": {"surprise": "inverted_u", "novelty": True, "quarantine": True,
+                "modes": True, "lineage": True, "learning_progress": True},
+}
 
 
 def productive_surprise(error, scale):
@@ -469,6 +545,8 @@ class Memory:
             "history": [],
         }
         self.pe_scale = 1.0
+        self.cfg = dict(DEFAULT_CFG)  # ablation knobs; run() overrides per variant
+        self.lp_hist = {}  # motif -> recent outcomes, for the learning progress signal
 
     def add_or_update(self, key, expr, stats, predicted, error, gen,
                       novelty=None, motifs=None, lesson=None, status="trusted",
@@ -535,7 +613,40 @@ class Memory:
             self.lineage_failures[key] = self.lineage_failures.get(key, 0) + 1
 
     def lineage_blocked(self, key):
+        if not self.cfg.get("lineage", True):
+            return False
         return self.lineage_failures.get(key, 0) >= LINEAGE_FAILURE_LIMIT
+
+    def note_progress(self, motifs, value):
+        """Record a fitness outcome per motif so the agent can tell where it is
+        still learning (improving) versus where it has stagnated or mastered."""
+        if not np.isfinite(value):
+            return
+        for m in motifs:
+            h = self.lp_hist.get(m)
+            if h is None:
+                if len(self.lp_hist) >= MAX_LP_MOTIFS:
+                    self.lp_hist.pop(next(iter(self.lp_hist)))
+                h = self.lp_hist[m] = []
+            h.append(float(value))
+            if len(h) > LP_WINDOW:
+                del h[0]
+
+    def progress_score(self, motifs):
+        """Curiosity bonus in [0, 1]: how fast outcomes are rising for a
+        candidate's motifs. This is learning progress, not raw surprise. Mastered
+        or stagnant regions score zero; regions still improving score high, which
+        is the signal the curiosity literature says human exploration tracks."""
+        best = 0.0
+        for m in motifs:
+            h = self.lp_hist.get(m)
+            if not h or len(h) < 6:
+                continue
+            half = len(h) // 2
+            lp = float(np.mean(h[half:]) - np.mean(h[:half]))
+            if lp > best:
+                best = lp
+        return float(np.clip(best, 0.0, 1.0))
 
     def reinforce(self, touched_keys, used_counts, gen, max_cap=300,
                   decay=0.95, a=0.5, b=0.3, c=0.2, d=0.1):
@@ -551,12 +662,20 @@ class Memory:
                 abs(float(self.items[k].get("prediction_error", 0.0)))
                 for k in touched
             ]
-            surp = [productive_surprise(error, self.pe_scale) for error in errors]
             novel = [self.items[k].get("novelty", 0.0) for k in touched]
             nf = _minmax_norm(fit)
             nu = _minmax_norm(used)
-            ns = np.asarray(surp, dtype=float)
-            nn = _minmax_norm(novel)
+            surprise_mode = self.cfg.get("surprise", "inverted_u")
+            if surprise_mode == "none":
+                ns = np.zeros(len(touched))
+            elif surprise_mode == "monotonic":
+                ns = _minmax_norm(errors)
+            else:
+                ns = np.asarray(
+                    [productive_surprise(e, self.pe_scale) for e in errors],
+                    dtype=float)
+            nn = (_minmax_norm(novel) if self.cfg.get("novelty", True)
+                  else np.zeros(len(touched)))
             for i, k in enumerate(touched):
                 it = self.items[k]
                 it["strength"] = it["strength"] * decay + (
@@ -730,6 +849,22 @@ MAX_DEPTH = 4
 def subexpressions(node):
     """Every real sub expression in canonical string form."""
     return [to_str(_get(node, p)) for p in _positions(node)]
+
+
+def operators_in(node):
+    """Every operator used in an expression, no leaves. A small bounded vocabulary
+    (about twenty ops), so per operator learning progress histories build reliably
+    instead of churning the way unique sub expression strings do."""
+    ops = []
+
+    def walk(n):
+        if isinstance(n, list) and n:
+            ops.append(n[0])
+            for c in n[1:]:
+                walk(c)
+
+    walk(node)
+    return ops
 
 
 def fragment_set(node):
@@ -1082,6 +1217,8 @@ def build_panel(data, seed):
     """Pick a data source and return the panel dict."""
     if data == "synthetic":
         return synthetic_panel(seed=seed)
+    if data == "adversarial":
+        return adversarial_panel(seed=seed)
     return yfinance_panel()
 
 
@@ -1399,17 +1536,21 @@ def assess_candidate(rec, memory, panel, split, cost, context, hof):
     ratio = abs(float(rec["error"])) / max(memory.pe_scale, 1e-6)
     useful_surprise = productive_surprise(rec["error"], memory.pe_scale)
     ok, lesson = critic_offline(rec["expr"], stats)
-    status = "trusted" if ok and _stats_finite(stats) else "quarantined"
     stress = None
-    prior_quarantine = (
-        rec["key"] in memory.items
-        and memory.items[rec["key"]].get("status") == "quarantined"
-    )
-    if status == "trusted" and (ratio > SURPRISE_QUARANTINE or prior_quarantine):
-        stress_ok, stress = stress_verify(rec["expr"], panel, split, cost, stats)
-        status = "trusted" if stress_ok else "quarantined"
-        if not stress_ok:
-            lesson = "extreme surprise failed stress verification"
+    if memory.cfg.get("quarantine", True):
+        status = "trusted" if ok and _stats_finite(stats) else "quarantined"
+        prior_quarantine = (
+            rec["key"] in memory.items
+            and memory.items[rec["key"]].get("status") == "quarantined"
+        )
+        if status == "trusted" and (ratio > SURPRISE_QUARANTINE or prior_quarantine):
+            stress_ok, stress = stress_verify(rec["expr"], panel, split, cost, stats)
+            status = "trusted" if stress_ok else "quarantined"
+            if not stress_ok:
+                lesson = "extreme surprise failed stress verification"
+    else:
+        # no quarantine firewall: only reject non finite (junk) results
+        status = "trusted" if _stats_finite(stats) else "quarantined"
     risk = {
         "tier": rec.get("risk_tier", "normal"),
         "novelty": nov,
@@ -1517,7 +1658,7 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         weave=False, elite_n=10, cost=0.0001, mem_path="memory.json",
         history_path="history.csv", curve_path="learning_curve.png",
         model="claude-sonnet-4-6", sleep_now=False, progress_cb=None,
-        risk="max", max_minutes=0):
+        risk="max", max_minutes=0, variant="ours"):
     """The generational search. Returns a summary dict."""
     random.seed(seed)
     panel = build_panel(data, seed)
@@ -1526,6 +1667,8 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
     split = int(0.70 * T)
 
     memory = Memory.load(mem_path) if os.path.exists(mem_path) else Memory()
+    cfg = dict(VARIANTS.get(variant, DEFAULT_CFG))
+    memory.cfg = cfg
 
     if weave and HAVE_WEAVE:
         try:
@@ -1538,8 +1681,8 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         print("  (weave missing, skipped tracing. Run: pip install weave)")
 
     print(f"run  mode {mode}  data {data}  gens {generations}  pop {pop}  "
-          f"seed {seed}  risk {risk}  mem0 {len(memory.items)}  "
-          f"panel {panel_report['shape']}")
+          f"seed {seed}  risk {risk}  variant {variant}  "
+          f"mem0 {len(memory.items)}  panel {panel_report['shape']}")
 
     # Initial population: carry over elites from memory, top up with proposals.
     ctx = memory.assemble_context()
@@ -1562,7 +1705,7 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
     sigma_scale = max(memory.pe_scale, 1.0)
     n_stall = 0
     recent_pass = []
-    cognitive_mode = "dream"
+    cognitive_mode = "dream" if cfg.get("modes", True) else "focus"
     duplicate_rate = 0.0
     quarantine_rate = 0.0
     deadline = (time.time() + max_minutes * 60.0) if max_minutes else None
@@ -1639,10 +1782,19 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
             rec["risk"] = risk_info
             rec["salience"] = salience
             rec["novelty"] = nov
+            lp_units = operators_in(rec["expr"])
+            lp = (memory.progress_score(lp_units)
+                  if cfg.get("learning_progress", False) else 0.0)
+            rec["lp"] = lp
             rec["selection_score"] = (
-                rec["fitness"] + 0.30 * nov +
-                0.25 * risk_info["productive_surprise"]
+                rec["fitness"]
+                + (0.30 * nov if cfg.get("novelty", True) else 0.0)
+                + (0.25 * risk_info["productive_surprise"]
+                   if cfg.get("surprise", "inverted_u") != "none" else 0.0)
+                + 0.20 * lp
             )
+            if cfg.get("learning_progress", False):
+                memory.note_progress(lp_units, rec["fitness"])
         for rec in sorted(
                 evaluated.values(), key=lambda r: (-r["salience"], r["key"]))[:3]:
             memory.note_salience(
@@ -1651,8 +1803,11 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
 
         # 3. Salience selects only trusted candidates for influence.
         trusted = [r for r in evaluated.values() if r["status"] == "trusted"]
-        ranked = sorted(trusted,
-                        key=lambda r: (-r["fitness"], r["key"]))
+        # Learning progress steers attention: bias which candidates become elites
+        # (and thus parents) toward operators where the search is still improving.
+        ranked = sorted(
+            trusted,
+            key=lambda r: (-(r["fitness"] + 0.20 * r.get("lp", 0.0)), r["key"]))
         elites = ranked[:elite_n]
 
         # 4. Critic on the elite: passers to hall of fame, rejects to lessons.
@@ -1745,8 +1900,9 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
             sleep(memory, panel, model=model, mode=mode)
 
         # 7. Breed the next population: elites plus fresh proposals.
-        next_mode = choose_cognitive_mode(
+        next_mode = (choose_cognitive_mode(
             g + 1, n_stall, duplicate_rate, quarantine_rate, hit_rate)
+            if cfg.get("modes", True) else "focus")
         next_profile = mode_profile(
             next_mode, explore_schedule(sigma_t, sigma_scale, n_stall), risk)
         parent_elites = sorted(elites, key=lambda r: (-r["selection_score"], r["key"]))
@@ -1801,7 +1957,8 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Alpha Evolver")
     p.add_argument("--mode", choices=["offline", "claude"], default="offline")
-    p.add_argument("--data", choices=["synthetic", "yfinance"], default="synthetic")
+    p.add_argument("--data", choices=["synthetic", "adversarial", "yfinance"],
+                   default="synthetic")
     p.add_argument("--generations", type=int, default=20)
     p.add_argument("--pop", type=int, default=56)
     p.add_argument("--weave", action="store_true")
@@ -1812,6 +1969,8 @@ def parse_args(argv=None):
     p.add_argument("--max-minutes", type=float, default=0,
                    help="wall clock budget; stop cleanly after this many minutes "
                         "(0 = use generations)")
+    p.add_argument("--variant", choices=sorted(VARIANTS), default="ours",
+                   help="ablation variant: ours, or a baseline isolating one mechanism")
     p.add_argument("--sleep-now", action="store_true",
                    help="run a sleep phase after generation 12 or at the last generation")
     p.add_argument("--selftest", action="store_true",
@@ -1958,7 +2117,7 @@ def main(argv=None):
         run(generations=args.generations, pop=args.pop, seed=args.seed,
             data=args.data, mode=args.mode, weave=args.weave, model=args.model,
             sleep_now=args.sleep_now, risk=args.risk,
-            max_minutes=args.max_minutes)
+            max_minutes=args.max_minutes, variant=args.variant)
     finally:
         if locked:
             _release_run_lock()

@@ -400,6 +400,45 @@ def _minmax_norm(x):
     return (x - lo) / (hi - lo)
 
 
+SURPRISE_QUARANTINE = 3.0
+LINEAGE_FAILURE_LIMIT = 3
+MAX_SAFE_SIZE = 40
+
+
+def productive_surprise(error, scale):
+    """Peak when a result is surprising but still inside the learnable zone."""
+    ratio = abs(float(error)) / max(float(scale), 1e-6)
+    return float(ratio * math.exp(1.0 - ratio))
+
+
+def _meaning_record(key, stats, status, context="unknown"):
+    """Ground operational meaning in evidence without claiming causality."""
+    gap = abs(float(stats["is_sharpe"]) - float(stats["oos_sharpe"]))
+    confidence = float(np.clip(1.0 - gap / 3.0, 0.0, 1.0))
+    if status != "trusted":
+        confidence *= 0.25
+    failures = []
+    if gap > 1.0:
+        failures.append("large in sample to out of sample gap")
+    if stats["turnover"] > 5.0:
+        failures.append("high turnover")
+    if status == "quarantined":
+        failures.append("requires independent verification")
+    return {
+        "hypothesis": f"{key} may contain predictive structure in {context}",
+        "evidence": {
+            "context": context,
+            "is_sharpe": float(stats["is_sharpe"]),
+            "oos_sharpe": float(stats["oos_sharpe"]),
+            "ic": float(stats["ic"]),
+        },
+        "confidence": confidence,
+        "causal_story": "association observed; causal mechanism unknown",
+        "transfer_conditions": [f"reverify outside {context}"],
+        "failure_modes": failures,
+    }
+
+
 class Memory:
     """Reinforced store of alphas plus the slow store of distilled knowledge."""
 
@@ -408,6 +447,9 @@ class Memory:
         self.principles = []  # {text, keys}
         self.motifs = []  # {fragment, strength, uses, avg_fitness}
         self.lessons = {}  # lesson text -> anti pattern record
+        self.salience_events = []
+        self.causal_models = []
+        self.lineage_failures = {}
         self.strategy = {
             "text": ("Prioritize cross sectional ranking of short window time series "
                      "smoothings of returns. Avoid raw price levels. Prefer low turnover."),
@@ -418,7 +460,8 @@ class Memory:
         self.pe_scale = 1.0
 
     def add_or_update(self, key, expr, stats, predicted, error, gen,
-                      novelty=None, motifs=None, lesson=None):
+                      novelty=None, motifs=None, lesson=None, status="trusted",
+                      risk=None, lineage=None, meaning=None):
         """Upsert a record. Strength and uses survive updates."""
         if error is not None and np.isfinite(error):
             self.pe_scale = 0.90 * self.pe_scale + 0.10 * max(abs(float(error)), 1e-6)
@@ -429,12 +472,20 @@ class Memory:
             it["predicted_sharpe"] = predicted
             it["prediction_error"] = error
             it["last_used_gen"] = gen
+            it["status"] = status
+            it["verification_count"] = int(it.get("verification_count", 0)) + 1
             if novelty is not None:
                 it["novelty"] = novelty
             if motifs is not None:
                 it["motifs"] = list(motifs)
             if lesson is not None:
                 it["lesson"] = lesson
+            if risk is not None:
+                it["risk"] = copy.deepcopy(risk)
+            if lineage is not None:
+                it["lineage"] = copy.deepcopy(lineage)
+            if meaning is not None:
+                it["meaning"] = copy.deepcopy(meaning)
         else:
             self.items[key] = {
                 "key": key,
@@ -449,13 +500,39 @@ class Memory:
                 "novelty": 0.0 if novelty is None else novelty,
                 "motifs": [] if motifs is None else list(motifs),
                 "lesson": "" if lesson is None else lesson,
+                "status": status,
+                "verification_count": 1,
+                "risk": {} if risk is None else copy.deepcopy(risk),
+                "lineage": {} if lineage is None else copy.deepcopy(lineage),
+                "meaning": {} if meaning is None else copy.deepcopy(meaning),
             }
         return self.items[key]
+
+    def note_salience(self, key, gen, reason, score):
+        """Keep a short episodic trace of what captured attention and why."""
+        self.salience_events.append({
+            "key": key,
+            "gen": gen,
+            "reason": reason,
+            "score": float(score),
+        })
+        self.salience_events = self.salience_events[-100:]
+
+    def note_lineage_failure(self, parent_keys):
+        """Block lineages that repeatedly produce rejected descendants."""
+        for key in parent_keys:
+            self.lineage_failures[key] = self.lineage_failures.get(key, 0) + 1
+
+    def lineage_blocked(self, key):
+        return self.lineage_failures.get(key, 0) >= LINEAGE_FAILURE_LIMIT
 
     def reinforce(self, touched_keys, used_counts, gen, max_cap=300,
                   decay=0.95, a=0.5, b=0.3, c=0.2, d=0.1):
         """Update strength of touched items, then evict the weakest over cap."""
-        touched = [k for k in touched_keys if k in self.items]
+        touched = [
+            k for k in touched_keys
+            if k in self.items and self.items[k].get("status", "trusted") == "trusted"
+        ]
         if touched:
             fit = [fitness(self.items[k]["stats"]) for k in touched]
             used = [float(used_counts.get(k, 0)) for k in touched]
@@ -463,7 +540,7 @@ class Memory:
                 abs(float(self.items[k].get("prediction_error", 0.0)))
                 for k in touched
             ]
-            surp = [min(error / max(self.pe_scale, 1e-6), 1.0) for error in errors]
+            surp = [productive_surprise(error, self.pe_scale) for error in errors]
             novel = [self.items[k].get("novelty", 0.0) for k in touched]
             nf = _minmax_norm(fit)
             nu = _minmax_norm(used)
@@ -490,9 +567,14 @@ class Memory:
     def assemble_context(self):
         """Deterministic retrieval. Verbatim deepcopies, the only recall path."""
         items = list(self.items.values())
+        trusted = [
+            r for r in items
+            if r.get("status", "trusted") == "trusted"
+            and not self.lineage_blocked(r["key"])
+        ]
 
-        def top(metric, n):
-            ranked = sorted(items, key=lambda r: (-metric(r), r["key"]))
+        def top(rows, metric, n):
+            ranked = sorted(rows, key=lambda r: (-metric(r), r["key"]))
             return [copy.deepcopy(r) for r in ranked[:n]]
 
         motifs_ranked = sorted(
@@ -502,12 +584,22 @@ class Memory:
             self.lessons.values(),
             key=lambda r: (-r["strength"], r["key"]))
         return {
-            "top_strength": top(lambda r: r["strength"], 8),
-            "top_novelty": top(lambda r: r.get("novelty", 0.0), 3),
-            "top_surprise": top(lambda r: abs(r.get("prediction_error", 0.0)), 3),
+            "top_strength": top(trusted, lambda r: r["strength"], 8),
+            "top_novelty": top(trusted, lambda r: r.get("novelty", 0.0), 3),
+            "top_surprise": top(
+                trusted,
+                lambda r: productive_surprise(
+                    r.get("prediction_error", 0.0), self.pe_scale),
+                3),
+            "quarantine": top(
+                [r for r in items if r.get("status") == "quarantined"],
+                lambda r: abs(r.get("prediction_error", 0.0)),
+                8),
             "principles": [copy.deepcopy(p) for p in self.principles],
             "motifs": [copy.deepcopy(m) for m in motifs_ranked[:6]],
             "top_lessons": [copy.deepcopy(r) for r in lessons_ranked[:3]],
+            "salience_events": copy.deepcopy(self.salience_events[-12:]),
+            "causal_models": copy.deepcopy(self.causal_models),
             "strategy": copy.deepcopy(self.strategy),
             "pe_scale": self.pe_scale,
         }
@@ -578,6 +670,9 @@ class Memory:
             "principles": self.principles,
             "motifs": self.motifs,
             "lessons": self.lessons,
+            "salience_events": self.salience_events,
+            "causal_models": self.causal_models,
+            "lineage_failures": self.lineage_failures,
             "strategy": self.strategy,
             "pe_scale": self.pe_scale,
         }
@@ -593,6 +688,9 @@ class Memory:
         m.principles = state.get("principles", [])
         m.motifs = state.get("motifs", [])
         m.lessons = state.get("lessons", {})
+        m.salience_events = state.get("salience_events", [])
+        m.causal_models = state.get("causal_models", [])
+        m.lineage_failures = state.get("lineage_failures", {})
         m.strategy = state.get("strategy", m.strategy)
         if "history" not in m.strategy:
             m.strategy["history"] = []
@@ -726,46 +824,95 @@ def crossover(a, b):
     return _set(a, random.choice(_positions(a)), donor)
 
 
-def _pick_elite(elites):
-    """Pick a parent expr, biased toward higher strength."""
+def _pick_elite_record(elites):
+    """Pick a parent record, biased toward higher strength."""
     weights = [
         max(0.0, r.get("strength", 0.0)) +
         0.30 * max(0.0, r.get("novelty", 0.0)) + 1e-6
         for r in elites
     ]
-    return random.choices(elites, weights=weights, k=1)[0]["expr"]
+    return random.choices(elites, weights=weights, k=1)[0]
 
 
-def propose_offline(context, k, explore, bold_ops=None):
+def _remote_pair(elites):
+    """Choose two parents with distant fragment sets."""
+    if len(elites) < 2:
+        one = _pick_elite_record(elites)
+        return one, one
+    sample = random.sample(elites, min(len(elites), 6))
+    pairs = [
+        (1.0 - similarity(a["expr"], b["expr"]), a, b)
+        for i, a in enumerate(sample)
+        for b in sample[i + 1:]
+    ]
+    _, a, b = max(pairs, key=lambda row: row[0])
+    return a, b
+
+
+def _candidate(expr, parents=(), origin="fresh", risk_tier="normal"):
+    return {
+        "expr": expr,
+        "parents": list(parents),
+        "origin": origin,
+        "risk_tier": risk_tier,
+    }
+
+
+def propose_offline(context, k, explore, bold_ops=None, with_lineage=False,
+                    cognitive_mode="focus"):
     """Breed k valid alphas from the context. The offline (no LLM) proposer."""
-    elites = context.get("top_strength", [])
+    seen = {}
+    for rec in context.get("top_strength", []) + context.get("top_novelty", []):
+        seen[rec["key"]] = rec
+    elites = list(seen.values())
     motifs = _motif_exprs(context)
+    risk_tier = "extreme" if cognitive_mode == "dream" else "normal"
 
     def one():
         r = random.random()
         required = random.choice(bold_ops) if bold_ops and random.random() < 0.50 else None
         if r < explore or not elites:
-            depth = random.randint(3, MAX_DEPTH) if bold_ops else random.randint(2, MAX_DEPTH)
+            lower = 3 if cognitive_mode == "dream" or bold_ops else 2
+            depth = random.randint(lower, MAX_DEPTH)
             cand = rand_expr(depth, motifs=motifs, required_op=required)
             if required and not _has_op(cand, required):
                 cand = [required, cand] if required in UNARY + CS_OPS else cand
-            return cand
+            return _candidate(cand, origin="fresh", risk_tier=risk_tier)
         if r < explore + 0.30:
-            return crossover(_pick_elite(elites), _pick_elite(elites))
-        return mutate(_pick_elite(elites))
+            if cognitive_mode == "dream":
+                a, b = _remote_pair(elites)
+            else:
+                a, b = _pick_elite_record(elites), _pick_elite_record(elites)
+            return _candidate(
+                crossover(a["expr"], b["expr"]),
+                parents=(a["key"], b["key"]),
+                origin="remote crossover" if cognitive_mode == "dream" else "crossover",
+                risk_tier=risk_tier)
+        parent = _pick_elite_record(elites)
+        return _candidate(
+            mutate(parent["expr"]),
+            parents=(parent["key"],),
+            origin="mutation",
+            risk_tier=risk_tier)
 
     out = []
     for _ in range(k * 20):
         if len(out) >= k:
             break
         cand = one()
-        if valid(cand):
+        if valid(cand["expr"]) and size(cand["expr"]) <= MAX_SAFE_SIZE:
             out.append(cand)
-    while len(out) < k:
+    for _ in range(k * 20):
+        if len(out) >= k:
+            break
         cand = rand_expr(random.randint(2, MAX_DEPTH), motifs=motifs)
-        if valid(cand):
-            out.append(cand)
-    return out[:k]
+        if valid(cand) and size(cand) <= MAX_SAFE_SIZE:
+            out.append(_candidate(cand, origin="fallback", risk_tier=risk_tier))
+    while len(out) < k:
+        out.append(_candidate(random.choice(FIELDS), origin="safe fallback"))
+    if with_lineage:
+        return out[:k]
+    return [r["expr"] for r in out[:k]]
 
 
 def mine_motifs(memory, hof, top_n=20):
@@ -1072,12 +1219,40 @@ def validate_principles(memory, hof):
     return kept
 
 
+def consolidate_meaning(memory):
+    """Turn supported principles into explicit, falsifiable causal hypotheses."""
+    models = []
+    for principle in memory.principles:
+        keys = [
+            key for key in principle.get("keys", [])
+            if key in memory.items
+            and memory.items[key].get("status", "trusted") == "trusted"
+        ]
+        if not keys:
+            continue
+        confidence = float(np.mean([
+            memory.items[key].get("meaning", {}).get("confidence", 0.0)
+            for key in keys
+        ]))
+        models.append({
+            "claim": principle["text"],
+            "status": "association, mechanism unproven",
+            "supporting_keys": keys,
+            "confidence": confidence,
+            "falsifier": "fails independent verification in a new context",
+        })
+    memory.causal_models = models[:8]
+    return memory.causal_models
+
+
 def sleep(memory, panel, model=None, mode="offline"):
     """Fast slow consolidation. Distill, validate, replay, decay."""
     hof = {
         k: {"key": k, "expr": r["expr"], "stats": r["stats"]}
         for k, r in memory.items.items()
         if r["stats"].get("oos_sharpe", 0.0) > 0.0
+        and r.get("status", "trusted") == "trusted"
+        and not memory.lineage_blocked(k)
     }
     if mode == "claude" and model:
         # Claude principle extraction is intentionally conservative. If it fails,
@@ -1086,6 +1261,7 @@ def sleep(memory, panel, model=None, mode="offline"):
     else:
         distill_principles_offline(memory, hof)
     validate_principles(memory, hof)
+    consolidate_meaning(memory)
     mine_motifs(memory, hof)
 
     split = int(0.70 * panel["returns"].shape[0])
@@ -1097,15 +1273,32 @@ def sleep(memory, panel, model=None, mode="offline"):
             predicted = _predict_sharpe(memory.assemble_context())
             stats = backtest(child, panel, split)
             error = stats["oos_sharpe"] - predicted
-            ok, lesson = critic_offline(child, stats)
-            if ok:
-                key = to_str(child)
-                memory.add_or_update(key, child, stats, predicted=predicted,
-                                     error=error, gen=-1,
-                                     novelty=novelty(child, hof),
-                                     motifs=subexpressions(child))
+            key = to_str(child)
+            rec = {
+                "key": key,
+                "expr": child,
+                "stats": stats,
+                "fitness": fitness(stats),
+                "predicted": predicted,
+                "error": error,
+                "parents": [ranked[i]["key"], ranked[i + 1]["key"]],
+                "origin": "sleep replay",
+                "risk_tier": "dream",
+            }
+            status, lesson, risk_info, salience, meaning = assess_candidate(
+                rec, memory, panel, split, 0.0001, "sleep replay", hof)
+            memory.add_or_update(
+                key, child, stats, predicted=predicted, error=error, gen=-1,
+                novelty=risk_info["novelty"], motifs=subexpressions(child),
+                lesson=lesson, status=status, risk=risk_info,
+                lineage={"parents": rec["parents"], "origin": "sleep replay",
+                         "created_mode": "sleep"},
+                meaning=meaning)
+            memory.note_salience(key, -1, "sleep replay", salience)
+            if status == "trusted" and stats["oos_sharpe"] > 0.0:
                 offspring.append((key, stats))
             elif lesson:
+                memory.note_lineage_failure(rec["parents"])
                 memory.note_lesson(lesson, gen=-1)
 
     for rec in memory.items.values():
@@ -1132,6 +1325,105 @@ def sleep(memory, panel, model=None, mode="offline"):
 # ---------------------------------------------------------------------------
 
 
+def validate_panel(panel):
+    """Reject malformed or suspicious data before it can shape memory."""
+    missing = [name for name in PANEL_FIELDS if name not in panel]
+    if missing:
+        raise ValueError(f"panel missing fields: {missing}")
+    shapes = {name: np.asarray(panel[name]).shape for name in PANEL_FIELDS}
+    if len(set(shapes.values())) != 1 or len(next(iter(shapes.values()))) != 2:
+        raise ValueError(f"panel shapes disagree: {shapes}")
+    bad = {
+        name: int(np.size(panel[name]) - np.isfinite(panel[name]).sum())
+        for name in PANEL_FIELDS
+    }
+    if any(bad.values()):
+        raise ValueError(f"panel contains non finite values: {bad}")
+    ret = np.asarray(panel["returns"], dtype=float)
+    fwd = np.asarray(panel["fwd_ret"], dtype=float)
+    if not np.allclose(fwd[:-1], ret[1:], atol=1e-12, rtol=1e-9):
+        raise ValueError("forward returns are not aligned to next day returns")
+    return {"shape": next(iter(shapes.values())), "bad_values": bad}
+
+
+def _stats_finite(stats):
+    return all(np.isfinite(float(v)) for v in stats.values())
+
+
+def stress_verify(node, panel, split, cost, stats):
+    """Require extreme positive discoveries to survive a harsher cost model."""
+    stressed = backtest(node, panel, split, max(cost * 3.0, cost + 0.0002))
+    base = float(stats["oos_sharpe"])
+    stressed_oos = float(stressed["oos_sharpe"])
+    ok = (_stats_finite(stressed) and base > 0.0 and stressed_oos > 0.0
+          and stressed_oos >= 0.25 * base)
+    return ok, stressed
+
+
+def assess_candidate(rec, memory, panel, split, cost, context, hof):
+    """Assign trust, risk, meaning, and salience after reality testing."""
+    stats = rec["stats"]
+    nov = novelty(rec["expr"], hof)
+    ratio = abs(float(rec["error"])) / max(memory.pe_scale, 1e-6)
+    useful_surprise = productive_surprise(rec["error"], memory.pe_scale)
+    ok, lesson = critic_offline(rec["expr"], stats)
+    status = "trusted" if ok and _stats_finite(stats) else "quarantined"
+    stress = None
+    prior_quarantine = (
+        rec["key"] in memory.items
+        and memory.items[rec["key"]].get("status") == "quarantined"
+    )
+    if status == "trusted" and (ratio > SURPRISE_QUARANTINE or prior_quarantine):
+        stress_ok, stress = stress_verify(rec["expr"], panel, split, cost, stats)
+        status = "trusted" if stress_ok else "quarantined"
+        if not stress_ok:
+            lesson = "extreme surprise failed stress verification"
+    risk = {
+        "tier": rec.get("risk_tier", "normal"),
+        "novelty": nov,
+        "surprise_ratio": ratio,
+        "productive_surprise": useful_surprise,
+        "structural_risk": min(size(rec["expr"]) / MAX_SAFE_SIZE, 1.0),
+        "stress_oos_sharpe": None if stress is None else stress["oos_sharpe"],
+    }
+    salience = (
+        0.50 * useful_surprise +
+        0.30 * nov +
+        0.20 * max(0.0, min(fitness(stats) / 3.0, 1.0))
+    )
+    if status != "trusted":
+        salience *= 0.25
+    meaning = _meaning_record(rec["key"], stats, status, context)
+    return status, lesson, risk, salience, meaning
+
+
+def choose_cognitive_mode(gen, n_stall, duplicate_rate, quarantine_rate,
+                          hit_rate):
+    """Switch between imagination, control, and recovery."""
+    if quarantine_rate > 0.65 or hit_rate < 0.10:
+        return "recover"
+    if n_stall >= 2 or duplicate_rate > 0.55 or gen % 4 == 0:
+        return "dream"
+    return "focus"
+
+
+def risk_budget_value(risk):
+    return {"calm": 0.35, "bold": 0.70, "max": 1.0}.get(risk, 1.0)
+
+
+def mode_profile(cognitive_mode, adaptive_explore, risk="max"):
+    """Set thought risk while keeping verification unchanged."""
+    budget = risk_budget_value(risk)
+    if cognitive_mode == "dream":
+        return {"explore": max(0.65 + 0.17 * budget, adaptive_explore),
+                "carry_fraction": 0.30 - 0.12 * budget, "bold": True}
+    if cognitive_mode == "recover":
+        return {"explore": 0.20, "carry_fraction": 0.55, "bold": False}
+    return {"explore": min(0.35 + 0.20 * budget, adaptive_explore),
+            "carry_fraction": 0.45 - 0.10 * budget,
+            "bold": adaptive_explore > 0.40}
+
+
 def explore_schedule(sigma_t, sigma_scale, n_stall):
     """Adaptive exploration from surprise and search stall."""
     raw = 0.10 + 0.5 * sigma_t / max(sigma_scale, 1e-6) + 0.05 * n_stall
@@ -1143,7 +1435,8 @@ def _write_history(path, history):
         w = csv.writer(f)
         w.writerow(["gen", "best_oos_so_far", "best_oos_gen",
                     "median_oos", "explore", "mem_size", "mean_abs_pe",
-                    "sigma_t", "n_stall", "hit_rate"])
+                    "sigma_t", "n_stall", "hit_rate", "cognitive_mode",
+                    "quarantine_rate", "duplicate_rate"])
         for row in history:
             w.writerow(row)
 
@@ -1191,10 +1484,12 @@ def _weave_op(fn):
 def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         weave=False, elite_n=10, cost=0.0001, mem_path="memory.json",
         history_path="history.csv", curve_path="learning_curve.png",
-        model="claude-sonnet-4-6", sleep_now=False, progress_cb=None):
+        model="claude-sonnet-4-6", sleep_now=False, progress_cb=None,
+        risk="max"):
     """The generational search. Returns a summary dict."""
     random.seed(seed)
     panel = build_panel(data, seed)
+    panel_report = validate_panel(panel)
     T = panel["returns"].shape[0]
     split = int(0.70 * T)
 
@@ -1211,13 +1506,19 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         print("  (weave missing, skipped tracing. Run: pip install weave)")
 
     print(f"run  mode {mode}  data {data}  gens {generations}  pop {pop}  "
-          f"seed {seed}  mem0 {len(memory.items)}")
+          f"seed {seed}  risk {risk}  mem0 {len(memory.items)}  "
+          f"panel {panel_report['shape']}")
 
     # Initial population: carry over elites from memory, top up with proposals.
     ctx = memory.assemble_context()
-    population = [copy.deepcopy(r["expr"]) for r in ctx["top_strength"]][:pop]
+    population = [
+        _candidate(copy.deepcopy(r["expr"]), parents=(r["key"],), origin="recall")
+        for r in ctx["top_strength"]
+    ][:pop]
     if len(population) < pop:
-        population += propose_offline(ctx, pop - len(population), explore=0.45)
+        population += propose_offline(
+            ctx, pop - len(population), explore=0.82, with_lineage=True,
+            cognitive_mode="dream")
 
     bt_cache = {}
     used_as_parent = Counter()
@@ -1229,21 +1530,33 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
     sigma_scale = max(memory.pe_scale, 1.0)
     n_stall = 0
     recent_pass = []
+    cognitive_mode = "dream"
+    duplicate_rate = 0.0
+    quarantine_rate = 0.0
 
     for g in range(generations):
-        explore = explore_schedule(sigma_t, sigma_scale, n_stall)
-        bold_ops = rare_ops_from_hof(hof) if explore > 0.40 else None
+        adaptive_explore = explore_schedule(sigma_t, sigma_scale, n_stall)
+        profile = mode_profile(cognitive_mode, adaptive_explore, risk)
+        explore = profile["explore"]
+        bold_ops = rare_ops_from_hof(hof) if profile["bold"] else None
         ctx_for_pred = memory.assemble_context()
         baseline_pred = _predict_sharpe(ctx_for_pred)
 
         # 1. Evaluate every valid individual, dedup by canonical key.
         evaluated = {}
         pe_vals = []
-        for ind in population:
-            if not valid(ind):
+        invalid_count = 0
+        duplicate_count = 0
+        for cand in population[:pop]:
+            if not isinstance(cand, dict):
+                cand = _candidate(cand)
+            ind = cand["expr"]
+            if not valid(ind) or size(ind) > MAX_SAFE_SIZE:
+                invalid_count += 1
                 continue
             key = to_str(ind)
             if key in evaluated:
+                duplicate_count += 1
                 continue
             pred = baseline_pred
             if key in memory.items:
@@ -1255,20 +1568,51 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
             pe_vals.append(abs(error))
             evaluated[key] = {"key": key, "expr": ind, "stats": stats,
                               "fitness": fitness(stats), "predicted": pred,
-                              "error": error}
+                              "error": error, "parents": cand.get("parents", []),
+                              "origin": cand.get("origin", "unknown"),
+                              "risk_tier": cand.get("risk_tier", "normal")}
+        if not evaluated:
+            raise RuntimeError(
+                f"circuit breaker: no valid candidates in generation {g}; "
+                f"invalid {invalid_count}, duplicates {duplicate_count}")
 
-        # 2. Store every verified result.
+        # 2. Assess and store every verified result.
         for rec in evaluated.values():
-            nov = novelty(rec["expr"], hof)
+            status, lesson, risk_info, salience, meaning = assess_candidate(
+                rec, memory, panel, split, cost, data, hof)
+            nov = risk_info["novelty"]
+            lineage = {
+                "parents": list(rec["parents"]),
+                "origin": rec["origin"],
+                "created_mode": cognitive_mode,
+            }
             memory.add_or_update(rec["key"], rec["expr"], rec["stats"],
                                  predicted=rec["predicted"], error=rec["error"],
                                  gen=g, novelty=nov,
-                                 motifs=subexpressions(rec["expr"]))
+                                 motifs=subexpressions(rec["expr"]),
+                                 lesson=lesson, status=status, risk=risk_info,
+                                 lineage=lineage, meaning=meaning)
+            if status == "quarantined":
+                memory.note_lineage_failure(rec["parents"])
+                if lesson:
+                    memory.note_lesson(lesson, g)
+            rec["status"] = status
+            rec["risk"] = risk_info
+            rec["salience"] = salience
             rec["novelty"] = nov
-            rec["selection_score"] = rec["stats"]["oos_sharpe"] + 0.30 * nov
+            rec["selection_score"] = (
+                rec["fitness"] + 0.30 * nov +
+                0.25 * risk_info["productive_surprise"]
+            )
+        for rec in sorted(
+                evaluated.values(), key=lambda r: (-r["salience"], r["key"]))[:3]:
+            memory.note_salience(
+                rec["key"], g,
+                f"{rec['origin']} in {cognitive_mode} mode", rec["salience"])
 
-        # 3. Rank by fitness, take the elite.
-        ranked = sorted(evaluated.values(),
+        # 3. Salience selects only trusted candidates for influence.
+        trusted = [r for r in evaluated.values() if r["status"] == "trusted"]
+        ranked = sorted(trusted,
                         key=lambda r: (-r["fitness"], r["key"]))
         elites = ranked[:elite_n]
 
@@ -1276,11 +1620,13 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         passed = 0
         for e in elites:
             ok, lesson = (critic_claude(e["expr"], e["stats"], model)
-                          if mode == "claude" else critic_offline(e["expr"], e["stats"]))
+                          if mode == "claude" else (True, ""))
             if ok:
                 hof[e["key"]] = e
                 passed += 1
             else:
+                memory.items[e["key"]]["status"] = "quarantined"
+                memory.note_lineage_failure(e["parents"])
                 memory.note_lesson(lesson, g)
         hit_rate = passed / max(1, len(elites))
         recent_pass.append(hit_rate)
@@ -1296,10 +1642,11 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         mine_motifs(memory, hof)
 
         # 6. Log.
-        oos = [r["stats"]["oos_sharpe"] for r in evaluated.values()]
+        reportable = trusted if trusted else list(evaluated.values())
+        oos = [r["stats"]["oos_sharpe"] for r in reportable]
         gen_best = max(oos)
         median_oos = float(np.median(oos))
-        gen_best_rec = max(evaluated.values(),
+        gen_best_rec = max(reportable,
                            key=lambda r: r["stats"]["oos_sharpe"])
         if gen_best > best_oos_so_far:
             best_oos_so_far = gen_best
@@ -1310,21 +1657,31 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         mean_abs_pe = float(np.mean(pe_vals)) if pe_vals else 0.0
         sigma_t = 0.80 * sigma_t + 0.20 * mean_abs_pe
         sigma_scale = 0.95 * sigma_scale + 0.05 * max(mean_abs_pe, 1e-6)
+        duplicate_rate = duplicate_count / max(1, len(population))
+        quarantine_rate = (
+            sum(r["status"] == "quarantined" for r in evaluated.values())
+            / max(1, len(evaluated))
+        )
         history.append((g, round(best_oos_so_far, 4), round(gen_best, 4),
                         round(median_oos, 4), round(explore, 4),
                         len(memory.items), round(mean_abs_pe, 4),
-                        round(sigma_t, 4), n_stall, round(hit_rate, 4)))
+                        round(sigma_t, 4), n_stall, round(hit_rate, 4),
+                        cognitive_mode, round(quarantine_rate, 4),
+                        round(duplicate_rate, 4)))
         print(f"gen {g:02d}  best_oos {best_oos_so_far:+.3f}  "
               f"median {median_oos:+.3f}  mean_abs_pe {mean_abs_pe:.3f}  "
-              f"sigma {sigma_t:.3f}  stall {n_stall:02d}  explore {explore:.2f}  "
-              f"hit {hit_rate:.2f}  strat v{memory.strategy.get('version', 0)}  "
+              f"mode {cognitive_mode:7s}  explore {explore:.2f}  "
+              f"quarantine {quarantine_rate:.2f}  duplicates {duplicate_rate:.2f}  "
+              f"hit {hit_rate:.2f}  "
               f"mem {len(memory.items):3d}  | {best_alpha['key']}")
         if weave and HAVE_WEAVE:
             try:
                 import weave as weave_mod
                 weave_mod.log({"gen": g, "best_oos": best_oos_so_far,
                                "median_oos": median_oos, "explore": explore,
-                               "mean_abs_pe": mean_abs_pe, "hit_rate": hit_rate})
+                               "mean_abs_pe": mean_abs_pe, "hit_rate": hit_rate,
+                               "cognitive_mode": cognitive_mode,
+                               "quarantine_rate": quarantine_rate})
             except Exception:
                 pass
         if progress_cb is not None:
@@ -1341,20 +1698,40 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
             maybe_rewrite_strategy(memory, hof, float(np.mean(recent_pass)), g, model)
         if sleep_now and g == min(12, generations - 1):
             sleep(memory, panel, model=model, mode=mode)
-        elif (g + 1) % 8 == 0 and mode == "claude":
+        elif (g + 1) % 6 == 0:
             sleep(memory, panel, model=model, mode=mode)
 
         # 7. Breed the next population: elites plus fresh proposals.
+        next_mode = choose_cognitive_mode(
+            g + 1, n_stall, duplicate_rate, quarantine_rate, hit_rate)
+        next_profile = mode_profile(
+            next_mode, explore_schedule(sigma_t, sigma_scale, n_stall), risk)
         parent_elites = sorted(elites, key=lambda r: (-r["selection_score"], r["key"]))
-        elite_exprs = [copy.deepcopy(e["expr"]) for e in parent_elites]
+        carry_n = min(
+            len(parent_elites),
+            max(0, int(round(pop * next_profile["carry_fraction"]))))
+        elite_candidates = [
+            _candidate(copy.deepcopy(e["expr"]), parents=(e["key"],), origin="recall")
+            for e in parent_elites[:carry_n]
+        ]
         ctx = memory.assemble_context()
+        child_count = pop - len(elite_candidates)
+        next_bold = rare_ops_from_hof(hof) if next_profile["bold"] else None
         if mode == "claude":
-            children = propose_claude(ctx, pop - len(elite_exprs), model,
-                                      explore=explore, bold_ops=bold_ops)
+            raw_children = propose_claude(
+                ctx, child_count, model, explore=next_profile["explore"],
+                bold_ops=next_bold)
+            children = [
+                _candidate(expr, origin="claude", risk_tier=next_mode)
+                for expr in raw_children
+            ]
         else:
-            children = propose_offline(ctx, pop - len(elite_exprs), explore,
-                                       bold_ops=bold_ops)
-        population = elite_exprs + children
+            children = propose_offline(
+                ctx, child_count, next_profile["explore"],
+                bold_ops=next_bold, with_lineage=True,
+                cognitive_mode=next_mode)
+        population = elite_candidates + children
+        cognitive_mode = next_mode
 
     memory.save(mem_path)
     _write_history(history_path, history)
@@ -1387,6 +1764,8 @@ def parse_args(argv=None):
     p.add_argument("--weave", action="store_true")
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--model", default="claude-sonnet-4-6")
+    p.add_argument("--risk", choices=["calm", "bold", "max"], default="max",
+                   help="thought risk budget; safeguards stay active")
     p.add_argument("--sleep-now", action="store_true",
                    help="run a sleep phase after generation 12 or at the last generation")
     p.add_argument("--selftest", action="store_true",
@@ -1452,6 +1831,28 @@ def memory_selftest():
     print("full top_strength record (verbatim):")
     print(json.dumps(ctx["top_strength"][0], indent=2))
 
+    # Guardrail checks.
+    q_stats = dict(is_sharpe=9.0, oos_sharpe=9.0, turnover=0.1, size=2, ic=0.9)
+    q = m.add_or_update(
+        "Q", ["neg", "returns"], q_stats, predicted=0.0, error=9.0, gen=3,
+        status="quarantined", meaning=_meaning_record("Q", q_stats, "quarantined"))
+    q["strength"] = 999.0
+    assert "Q" not in [r["key"] for r in m.assemble_context()["top_strength"]]
+    m.note_lineage_failure(["A"])
+    m.note_lineage_failure(["A"])
+    m.note_lineage_failure(["A"])
+    assert m.lineage_blocked("A")
+    assert productive_surprise(1.0, 1.0) > productive_surprise(5.0, 1.0)
+    junk = synthetic_panel(T=30, N=4, seed=1)
+    junk["fwd_ret"] = junk["fwd_ret"].copy()
+    junk["fwd_ret"][0, 0] += 1.0
+    try:
+        validate_panel(junk)
+        raise AssertionError("junk data passed validation")
+    except ValueError:
+        pass
+    print("guardrails: quarantine, lineage breaker, bounded surprise, junk data passed")
+
 
 def main(argv=None):
     args = parse_args(argv)
@@ -1462,7 +1863,7 @@ def main(argv=None):
 
     run(generations=args.generations, pop=args.pop, seed=args.seed,
         data=args.data, mode=args.mode, weave=args.weave, model=args.model,
-        sleep_now=args.sleep_now)
+        sleep_now=args.sleep_now, risk=args.risk)
 
 
 if __name__ == "__main__":

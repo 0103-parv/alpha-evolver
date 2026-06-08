@@ -8,11 +8,13 @@ on numpy alone; every other dependency is optional and guarded.
 import argparse
 import copy
 import csv
+import errno
 import json
 import math
 import os
 import random
 import re
+import time
 import warnings
 from collections import Counter
 
@@ -404,6 +406,15 @@ SURPRISE_QUARANTINE = 3.0
 LINEAGE_FAILURE_LIMIT = 3
 MAX_SAFE_SIZE = 40
 
+# Long run memory bounds. Without these the hall of fame, backtest cache, and
+# anti pattern store grow without limit on long or resumed runs. The hall of
+# fame matters most: novelty scans all of it for every candidate every
+# generation, so an unbounded hall of fame also slows the search down over time.
+MAX_HOF = 300
+MAX_BT_CACHE = 6000
+MAX_LESSONS = 256
+CHECKPOINT_EVERY = 25  # save memory + history mid run so long runs are crash safe
+
 
 def productive_surprise(error, scale):
     """Peak when a result is surprising but still inside the learnable zone."""
@@ -626,6 +637,10 @@ class Memory:
         """Fade every anti pattern one generation. Stale ones sink."""
         for it in self.lessons.values():
             it["strength"] *= decay
+        if len(self.lessons) > MAX_LESSONS:
+            ranked = sorted(self.lessons.values(), key=lambda r: r["strength"])
+            for r in ranked[:len(self.lessons) - MAX_LESSONS]:
+                del self.lessons[r["key"]]
 
     # Slow store mutators. Later modules (sleep, motif extraction) drive these.
     def add_principle(self, text, keys):
@@ -959,6 +974,23 @@ def rare_ops_from_hof(hof):
         walk(rec["expr"])
     ranked = sorted(all_ops, key=lambda op: (counts[op], op))
     return ranked[:5]
+
+
+def _trim_hof(hof, cap=MAX_HOF):
+    """Bound the hall of fame to its strongest members by out of sample Sharpe.
+
+    Offline runs add every elite each generation, so without this the hall of
+    fame grows without limit and novelty, which scans it for every candidate,
+    makes each generation progressively slower and heavier.
+    """
+    if len(hof) <= cap:
+        return hof
+    ranked = sorted(
+        hof.items(),
+        key=lambda kv: (-kv[1]["stats"].get("oos_sharpe", 0.0), kv[0]))
+    for k, _ in ranked[cap:]:
+        del hof[k]
+    return hof
 
 
 # ---------------------------------------------------------------------------
@@ -1485,7 +1517,7 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         weave=False, elite_n=10, cost=0.0001, mem_path="memory.json",
         history_path="history.csv", curve_path="learning_curve.png",
         model="claude-sonnet-4-6", sleep_now=False, progress_cb=None,
-        risk="max"):
+        risk="max", max_minutes=0):
     """The generational search. Returns a summary dict."""
     random.seed(seed)
     panel = build_panel(data, seed)
@@ -1533,8 +1565,12 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
     cognitive_mode = "dream"
     duplicate_rate = 0.0
     quarantine_rate = 0.0
+    deadline = (time.time() + max_minutes * 60.0) if max_minutes else None
 
     for g in range(generations):
+        if deadline is not None and time.time() > deadline:
+            print(f"reached time budget ({max_minutes:.0f} min) at generation {g}")
+            break
         adaptive_explore = explore_schedule(sigma_t, sigma_scale, n_stall)
         profile = mode_profile(cognitive_mode, adaptive_explore, risk)
         explore = profile["explore"]
@@ -1571,6 +1607,9 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
                               "error": error, "parents": cand.get("parents", []),
                               "origin": cand.get("origin", "unknown"),
                               "risk_tier": cand.get("risk_tier", "normal")}
+        if len(bt_cache) > MAX_BT_CACHE:
+            for k in list(bt_cache.keys())[:len(bt_cache) - MAX_BT_CACHE]:
+                del bt_cache[k]
         if not evaluated:
             raise RuntimeError(
                 f"circuit breaker: no valid candidates in generation {g}; "
@@ -1631,6 +1670,7 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
         hit_rate = passed / max(1, len(elites))
         recent_pass.append(hit_rate)
         recent_pass = recent_pass[-4:]
+        _trim_hof(hof)
 
         # 5. Reinforce. Elites are the parent pool, so bump their parent use.
         for e in elites:
@@ -1674,6 +1714,9 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
               f"quarantine {quarantine_rate:.2f}  duplicates {duplicate_rate:.2f}  "
               f"hit {hit_rate:.2f}  "
               f"mem {len(memory.items):3d}  | {best_alpha['key']}")
+        if (g + 1) % CHECKPOINT_EVERY == 0:
+            memory.save(mem_path)
+            _write_history(history_path, history)
         if weave and HAVE_WEAVE:
             try:
                 import weave as weave_mod
@@ -1766,6 +1809,9 @@ def parse_args(argv=None):
     p.add_argument("--model", default="claude-sonnet-4-6")
     p.add_argument("--risk", choices=["calm", "bold", "max"], default="max",
                    help="thought risk budget; safeguards stay active")
+    p.add_argument("--max-minutes", type=float, default=0,
+                   help="wall clock budget; stop cleanly after this many minutes "
+                        "(0 = use generations)")
     p.add_argument("--sleep-now", action="store_true",
                    help="run a sleep phase after generation 12 or at the last generation")
     p.add_argument("--selftest", action="store_true",
@@ -1854,6 +1900,49 @@ def memory_selftest():
     print("guardrails: quarantine, lineage breaker, bounded surprise, junk data passed")
 
 
+_LOCK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          ".alpha_evolver.lock")
+
+
+def _acquire_run_lock(path=_LOCK_PATH):
+    """Refuse to start a second concurrent run so the machine is not overloaded.
+
+    Two heavy runs at once were the main cause of memory thrash. A stale lock
+    left by a dead pid is reclaimed automatically. Set ALPHA_EVOLVER_NO_LOCK=1
+    to bypass (for intentional parallel runs such as ablations).
+    """
+    if os.path.exists(path):
+        try:
+            old = int(open(path).read().strip() or "0")
+        except Exception:
+            old = 0
+        alive = False
+        if old > 0:
+            try:
+                os.kill(old, 0)
+                alive = True
+            except OSError as e:
+                alive = e.errno == errno.EPERM
+        if alive:
+            raise SystemExit(
+                f"another alpha_evolver run is active (pid {old}); refusing to "
+                f"start a second one and overload the machine. Wait for it to "
+                f"finish, set ALPHA_EVOLVER_NO_LOCK=1 to override, or remove "
+                f"{path} if that pid is dead.")
+    with open(path, "w") as f:
+        f.write(str(os.getpid()))
+    return path
+
+
+def _release_run_lock(path=_LOCK_PATH):
+    try:
+        if (os.path.exists(path)
+                and int(open(path).read().strip() or "0") == os.getpid()):
+            os.remove(path)
+    except Exception:
+        pass
+
+
 def main(argv=None):
     args = parse_args(argv)
 
@@ -1861,9 +1950,18 @@ def main(argv=None):
         memory_selftest()
         return
 
-    run(generations=args.generations, pop=args.pop, seed=args.seed,
-        data=args.data, mode=args.mode, weave=args.weave, model=args.model,
-        sleep_now=args.sleep_now, risk=args.risk)
+    locked = False
+    if not os.environ.get("ALPHA_EVOLVER_NO_LOCK"):
+        _acquire_run_lock()
+        locked = True
+    try:
+        run(generations=args.generations, pop=args.pop, seed=args.seed,
+            data=args.data, mode=args.mode, weave=args.weave, model=args.model,
+            sleep_now=args.sleep_now, risk=args.risk,
+            max_minutes=args.max_minutes)
+    finally:
+        if locked:
+            _release_run_lock()
 
 
 if __name__ == "__main__":

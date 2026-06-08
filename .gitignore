@@ -7,3 +7,7 @@ memory.json
 *.csv
 wandb/
 .weave_log/
+.alpha_evolver.lock
+*_run/
+run.log
+run.pid

@@ -5,18 +5,107 @@ literature, and reports the ablation and adversarial evidence for it. It is
 deliberately conservative: most of the machinery is a recombination of known
 ideas, and the point of the experiments is to find the parts that earn their keep.
 
-## The one-line claim
+## Max Cut creativity laboratory
+
+Max Cut is now the default laboratory. The agent evolves reusable heuristic
+programs across diverse graph families instead of tuning trading formulas. Each
+program contains a static initializer, a dynamic vertex move scorer, and bounded
+local search controls. The verifier is exact, deterministic, and hard limited.
+
+The experiment separates four kinds of evidence:
+
+- Train graphs determine primary search fitness.
+- Development graphs verify generalization, trust, and prediction error.
+- Sealed regular and heavy tail graph families are evaluated only after search.
+- Replay graphs measure whether contextual memory causally changes discovery.
+
+Before development verification, the agent predicts development quality from the
+observed train result and the train to development gaps of similar prior
+programs in matching contexts. This makes prediction error a generalization
+surprise rather than another name for fitness.
+
+Contextual memory stores immutable episodes and evidence grounded decision cards.
+Cards require support from two independent run seeds before becoming trusted.
+Retrieval includes the grounded contradiction episodes. Sealed graph identifiers
+fail closed if they appear anywhere in memory.
+
+The learned utility controller chooses dream, focus, challenge, recover, or
+sleep every five generations. It cannot stop before generation 30, and external
+limits always stop a run by 90 minutes or 250 generations.
+
+Two tested negatives shaped the implementation:
+
+- A global predictor assigned nearly the same prediction to every candidate and
+  was rejected because surprise became a disguised quality score.
+- An online ridge predictor received hundreds of observations but worsened live
+  calibration, so it was removed instead of being shipped as extra machinery.
+
+The retained contextual generalization predictor reduced mean absolute
+prediction error from 0.0137 in the first five generations to 0.0087 in the last
+five on a deterministic 30 generation calibration check. This is a mechanism
+check, not yet a broad result.
+
+### Max Cut surprise ablation
+
+Fixed 100 generation searches, population 12, five matched seeds:
+
+| variant | sealed quality |
+|---|---|
+| plain | 0.7380 ±0.0050 |
+| monotonic surprise plus quarantine | 0.7379 ±0.0037 |
+| quarantine only | 0.7366 ±0.0035 |
+| inverted U plus quarantine | 0.7362 ±0.0047 |
+| inverted U without quarantine | 0.7361 ±0.0039 |
+| fixed greedy reference | 0.7264 |
+
+The evolved programs transfer better than the fixed greedy reference. No
+surprise reward beats plain search. Inverted U trails quarantine only by 0.0004
+on average and wins three of five paired seeds, so it is not established.
+
+The Max Cut default is therefore novelty plus quarantine with no surprise reward.
+Inverted U remains an explicit experimental variant. Plain has the highest mean
+by 0.0001 over monotonic surprise plus quarantine, but quarantine keeps its
+independently demonstrated safety role at a small clean suite cost.
+
+### Max Cut stopping comparison
+
+Matched 100 generation ceilings, population 12, five seeds:
+
+| policy | sealed quality | generations used |
+|---|---|---|
+| fixed | 0.7366 +/-0.0035 | 100.0 +/-0.0 |
+| rules | 0.7378 +/-0.0037 | 55.0 +/-11.0 |
+| learned | 0.7396 +/-0.0048 | 87.0 +/-11.2 |
+
+Rule based stopping is the practical default. It retained sealed quality while
+using 45 percent fewer generations. Learned stopping also retained quality, but
+saved only 13 percent and had worse calibration. It remains experimental.
+
+### Max Cut contextual memory replay
+
+After building memory across five independent seeds, matched 12 generation cold
+and warm replays produced mean lift of -0.00002, with positive lift in two of
+five seeds. Warm memory changed every search trajectory, so the mechanism is
+causally active, but it has not demonstrated a discovery benefit. We reject the
+claim that contextual memory improves search until replay lift becomes positive.
+
+## The original trading hypothesis
 
 > **Productive surprise**: a single inverted-U prediction-error signal that
 > *reinforces memory* for moderate surprise while *quarantining and stress-testing*
 > extreme surprise as likely-toxic.
 
-That is curiosity's inverted-U (the Wundt / Berlyne / Kidd-Hayden curve) used as
+That was the original trading hypothesis: curiosity's inverted-U (the Wundt /
+Berlyne / Kidd-Hayden curve) used as
 **both** an exploration driver **and** a safety gate, in one signal. Around it sits
 a deliberately boring "organism": dream / focus / recover modes under a thought-risk
 budget, a quarantine trust-boundary, lineage circuit-breakers, and a sleep phase
 that distils falsifiable causal hypotheses. The motto: *imagine recklessly, believe
 cautiously, test relentlessly, remember with context.*
+
+The Max Cut result does not support promoting this hypothesis to a general
+mechanism. Quarantine transfers as a useful safety rule. The precise inverted U
+reward does not.
 
 ## What is borrowed vs. new (honest)
 
@@ -35,7 +124,7 @@ Every **ingredient** has close prior art (verified via a paperclip literature sc
 The **novelty is the specific fusion**, not any piece: using the inverted-U as a
 dual-purpose reinforcement-and-safety signal, wrapped in a risk-budgeted
 imagination layer with lineage containment and falsifiable causal memory, as one
-compact (single-file, numpy) research organism. Honest scores: new *principle*
+compact numpy research organism. Honest scores: new *principle*
 ~2/10; novel *combination* ~5/10; compact *prototype* ~6/10; *publishable today*
 ~3/10 without the evidence below.
 
@@ -49,7 +138,7 @@ Each variant isolates one mechanism (`--variant`; see `VARIANTS` in
 - `surprise_mono` — monotonic surprise (Gravina style)
 - `surprise_noquar` — our inverted-U surprise but **no** quarantine
 - `quar_mono` — quarantine but **monotonic** surprise (ablates the inverted-U)
-- `no_lp` — full system minus the learning-progress signal
+- `with_lp` — full system plus the tested learning progress signal
 - `ours` — everything
 
 ### Clean synthetic data (5 seeds, 60 generations)

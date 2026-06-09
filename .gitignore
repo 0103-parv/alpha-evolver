@@ -2,6 +2,7 @@
 __pycache__/
 .env
 memory.json
+graph_memory.json
 *.png
 !learning_curve.png
 *.csv

@@ -1,8 +1,8 @@
-"""Alpha Evolver: a self improving research agent for trading signals.
+"""Alpha Evolver: a self improving research agent.
 
-This module is the entry point and the synthetic data generator. Later modules
-add the DSL, backtester, memory store, and evolution loop. The offline path runs
-on numpy alone; every other dependency is optional and guarded.
+Max Cut is the default laboratory. This module preserves the legacy trading
+adapter and owns the shared command entry point. The offline path runs on numpy
+alone; every other dependency is optional and guarded.
 """
 
 import argparse
@@ -1956,20 +1956,28 @@ def run(generations=20, pop=56, seed=7, data="synthetic", mode="offline",
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Alpha Evolver")
+    p.add_argument("--domain", choices=["maxcut", "trading"], default="maxcut")
     p.add_argument("--mode", choices=["offline", "claude"], default="offline")
     p.add_argument("--data", choices=["synthetic", "adversarial", "yfinance"],
                    default="synthetic")
-    p.add_argument("--generations", type=int, default=20)
+    p.add_argument("--generations", type=int, default=None)
     p.add_argument("--pop", type=int, default=56)
     p.add_argument("--weave", action="store_true")
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--model", default="claude-sonnet-4-6")
     p.add_argument("--risk", choices=["calm", "bold", "max"], default="max",
                    help="thought risk budget; safeguards stay active")
-    p.add_argument("--max-minutes", type=float, default=0,
+    p.add_argument("--max-minutes", type=float, default=None,
                    help="wall clock budget; stop cleanly after this many minutes "
                         "(0 = use generations)")
-    p.add_argument("--variant", choices=sorted(VARIANTS), default="ours",
+    p.add_argument("--stop-policy", choices=["learned", "rules", "fixed"],
+                   default="rules",
+                   help="Max Cut meta controller stop policy")
+    p.add_argument("--memory-path", default=None,
+                   help="domain memory path; defaults to graph_memory.json or memory.json")
+    p.add_argument("--variant",
+                   choices=sorted(set(VARIANTS) | {"quarantine_only"}),
+                   default="ours",
                    help="ablation variant: ours, or a baseline isolating one mechanism")
     p.add_argument("--sleep-now", action="store_true",
                    help="run a sleep phase after generation 12 or at the last generation")
@@ -2106,18 +2114,58 @@ def main(argv=None):
     args = parse_args(argv)
 
     if args.selftest:
-        memory_selftest()
+        if args.domain == "maxcut":
+            from maxcut_lab import maxcut_selftest
+            maxcut_selftest()
+        else:
+            memory_selftest()
+        return
+
+    if args.domain == "maxcut":
+        from maxcut_lab import GRAPH_VARIANTS, run as run_maxcut
+        if args.mode != "offline":
+            raise SystemExit(
+                "Max Cut currently supports offline proposals only; "
+                "Claude remains available in the trading legacy adapter")
+        if args.variant not in GRAPH_VARIANTS:
+            raise SystemExit(
+                f"variant {args.variant!r} is not available for Max Cut; "
+                f"choose one of {sorted(GRAPH_VARIANTS)}")
+        locked = False
+        if not os.environ.get("ALPHA_EVOLVER_NO_LOCK"):
+            _acquire_run_lock()
+            locked = True
+        try:
+            run_maxcut(
+                generations=250 if args.generations is None else args.generations,
+                pop=args.pop,
+                seed=args.seed,
+                max_minutes=90 if args.max_minutes is None else args.max_minutes,
+                variant=args.variant,
+                stop_policy=args.stop_policy,
+                memory_path=args.memory_path or "graph_memory.json",
+                history_path="graph_history.csv",
+            )
+        finally:
+            if locked:
+                _release_run_lock()
         return
 
     locked = False
+    if args.variant not in VARIANTS:
+        raise SystemExit(
+            f"variant {args.variant!r} is not available for trading; "
+            f"choose one of {sorted(VARIANTS)}")
     if not os.environ.get("ALPHA_EVOLVER_NO_LOCK"):
         _acquire_run_lock()
         locked = True
     try:
-        run(generations=args.generations, pop=args.pop, seed=args.seed,
+        run(generations=20 if args.generations is None else args.generations,
+            pop=args.pop, seed=args.seed,
             data=args.data, mode=args.mode, weave=args.weave, model=args.model,
             sleep_now=args.sleep_now, risk=args.risk,
-            max_minutes=args.max_minutes, variant=args.variant)
+            max_minutes=0 if args.max_minutes is None else args.max_minutes,
+            mem_path=args.memory_path or "memory.json", variant=args.variant)
     finally:
         if locked:
             _release_run_lock()

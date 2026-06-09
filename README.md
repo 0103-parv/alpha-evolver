@@ -1,45 +1,70 @@
 # Alpha Evolver
 
-Alpha Evolver is a small research demo for self improving trading signals. It proposes sandboxed S expression alphas, verifies each one with a no lookahead backtest, stores the verified record in reinforced memory, then breeds the next generation from the strongest, most novel, and most surprising ideas.
+Alpha Evolver is a self improving research agent. Its default laboratory evolves
+reusable Max Cut heuristics across diverse graph families. It predicts before
+testing, verifies every program in a bounded executor, stores grounded contextual
+memory, and learns when another generation is likely to be useful.
+
+The original trading signal laboratory remains available as the `trading`
+adapter.
 
 The default path is offline and uses only numpy plus the standard library. Optional integrations are guarded for Claude, Weave, yfinance, matplotlib, and Streamlit.
 
-## 3 minute demo
+## First bounded run
 
 ```bash
 python3 -m venv .venv
 ./.venv/bin/pip install numpy matplotlib
-./.venv/bin/python alpha_evolver.py --generations 20 --pop 56
+./.venv/bin/python alpha_evolver.py --domain maxcut --generations 40 --pop 24
 ```
 
-Watch the per generation log. The synthetic panel has a planted short window reversal and a faint latent volume edge, so the best out of sample Sharpe should usually climb over the run. The command writes:
+The default rule based controller may request a clean stop after generation 30.
+The learned controller is available as an experimental policy. External limits
+always stop the run by 90 minutes or 250 generations. The command writes:
 
-- `memory.json`
-- `history.csv`
-- `learning_curve.png`
+- `graph_memory.json`
+- `graph_history.csv`
+
+At the end, matched 12 generation cold and warm replay searches report whether
+contextual memory improved discovery.
 
 ## Run commands
 
 ```bash
-# Offline synthetic demo
-./.venv/bin/python alpha_evolver.py --mode offline --data synthetic --generations 20 --pop 56
+# Default Max Cut laboratory
+./.venv/bin/python alpha_evolver.py --domain maxcut --generations 100 --pop 24
+
+# Fixed budget surprise experiment
+./.venv/bin/python graph_ablate.py --experiment surprise --generations 100 --seeds 1 2 3 4 5
+
+# Contextual memory lift experiment
+./.venv/bin/python graph_ablate.py --experiment memory --generations 30 --pop 12 --seeds 1 2 3 4 5
+
+# Learned versus rule versus fixed stopping
+./.venv/bin/python graph_ablate.py --experiment stopping --generations 100 --pop 12 --seeds 1 2 3 4 5
+
+# Legacy trading laboratory
+./.venv/bin/python alpha_evolver.py --domain trading --data synthetic --generations 20 --pop 56
 
 # Memory self test
 ./.venv/bin/python alpha_evolver.py --selftest
 
+# Legacy trading memory self test
+./.venv/bin/python alpha_evolver.py --domain trading --selftest
+
 # Sleep phase demo
-./.venv/bin/python alpha_evolver.py --generations 13 --pop 56 --sleep-now
+./.venv/bin/python alpha_evolver.py --domain trading --generations 13 --pop 56 --sleep-now
 
 # Claude mode, requires anthropic and ANTHROPIC_API_KEY in .env
-./.venv/bin/python alpha_evolver.py --mode claude --generations 4 --pop 24
+./.venv/bin/python alpha_evolver.py --domain trading --mode claude --generations 4 --pop 24
 
 # Real market data, requires yfinance
 ./.venv/bin/pip install yfinance
-./.venv/bin/python alpha_evolver.py --data yfinance --mode offline --generations 8
+./.venv/bin/python alpha_evolver.py --domain trading --data yfinance --mode offline --generations 8
 
 # Weave traces, requires weave
 ./.venv/bin/pip install weave
-./.venv/bin/python alpha_evolver.py --weave --mode claude --generations 6
+./.venv/bin/python alpha_evolver.py --domain trading --weave --mode claude --generations 6
 
 # Live dashboard, requires streamlit
 ./.venv/bin/pip install streamlit
@@ -49,34 +74,47 @@ Watch the per generation log. The synthetic panel has a planted short window rev
 ## Architecture
 
 ```text
-synthetic or yfinance panel
+domain adapter: Max Cut or trading
           |
           v
- sandboxed S expression DSL
+ sandboxed candidate program
           |
           v
- no lookahead verifier
+ independent bounded verifier
           |
           v
- reinforced memory store
-   |      |       |
-   |      |       +--> lessons
-   |      +----------> motifs
-   +-----------------> principles and strategy
+ contextual evidence memory
           |
           v
- proposer: offline genetic or Claude
+ learned utility controller
           |
           v
- next generation
+ dream / focus / challenge / recover / sleep
 ```
 
 ## Notes
 
-The headline metric is out of sample Sharpe on the last 30 percent of the panel. The search objective uses only the first 70 percent. Weights formed on day `t` earn `fwd_ret[t]`, which is the return at day `t + 1`.
+Max Cut search uses train graph quality only for primary fitness. Development
+graphs provide trust and stress verification. Sealed graph families are
+evaluated only after search and never enter memory or proposer context.
+
+Before each development verification, contextual memory predicts the candidate's
+unseen quality from its train result and the generalization gaps of similar prior
+programs. Prediction error is therefore a generalization surprise, not a second
+fitness score.
+
+Current evidence is intentionally conservative. Rule based stopping retained
+sealed quality while using 45 percent fewer generations than a fixed budget.
+Learned stopping retained quality but saved only 13 percent. Warm contextual
+memory changed every replay search, but did not improve mean replay quality
+across five matched seeds. It remains experimental.
+
+The trading adapter still uses out of sample Sharpe as its headline metric and
+preserves its no lookahead rules.
 
 `.env` is ignored by git.
 
 ## Credits
 
-Conceptual lineage: FunSearch and AlphaEvolve. This repo is a compact educational build, not a production trading system.
+Conceptual lineage: FunSearch and AlphaEvolve. This is a research prototype, not
+a production optimizer.

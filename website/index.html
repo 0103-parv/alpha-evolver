@@ -58,9 +58,21 @@
 </aside>
 
 <!-- Mascot -->
-<div class="mascot" id="mascot" aria-hidden="true">
+<div class="mascot" id="mascot">
+  <div class="coco-chat" id="coco-chat" role="dialog" aria-label="Chat with Coco" hidden>
+    <div class="coco-chat-head">
+      <span class="coco-chat-title">Coco <em>the Cordi bunny</em></span>
+      <button class="icon-button" id="coco-chat-close" aria-label="Close chat">&times;</button>
+    </div>
+    <div class="coco-chat-messages" id="coco-chat-messages" aria-live="polite"></div>
+    <div class="coco-chat-chips" id="coco-chat-chips"></div>
+    <form class="coco-chat-inputrow" id="coco-chat-form">
+      <input id="coco-chat-input" type="text" placeholder="Ask Coco anything…" autocomplete="off" maxlength="200">
+      <button type="submit" class="coco-chat-send" aria-label="Send message">➤</button>
+    </form>
+  </div>
   <div class="mascot-bubble" id="mascot-bubble" hidden></div>
-  <div class="mascot-stage" id="mascot-stage"></div>
+  <button class="mascot-stage" id="mascot-stage" aria-label="Chat with Coco, the Cordi Lab mascot"></button>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

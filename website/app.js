@@ -9,13 +9,13 @@ const PRODUCTS = {
     id: "soft-landing-single",
     name: "Soft Landing Blind Box",
     sub: "Single blind box",
-    price: 12.99,
+    price: 5.99,
   },
   "soft-landing-set": {
     id: "soft-landing-set",
     name: "Soft Landing Complete Set",
     sub: "Whole set of 4 blind boxes",
-    price: 46.99,
+    price: 19.99,
   },
 };
 
@@ -711,20 +711,9 @@ const BUNNY = {
   HEART: "#f091a3",
   INK: "#3b2f26",
 
-  /* Fluffy cloud silhouette: stroked circles first, then the same circles
-     fill-only on top so only the outer scalloped edge keeps an outline. */
-  FLUFF: [
-    [60, 80, 33], [40, 60, 17], [80, 60, 17], [60, 51, 19],
-    [31, 82, 14], [89, 82, 14], [41, 103, 12], [79, 103, 12], [60, 108, 13],
-  ],
-
-  fluffCircles(stroke) {
-    return BUNNY.FLUFF.map(([x, y, r]) =>
-      `<circle cx="${x}" cy="${y}" r="${r}" fill="${BUNNY.CREAM}"${
-        stroke ? ` stroke="${BUNNY.LINE}" stroke-width="3"` : ""
-      }/>`
-    ).join("");
-  },
+  /* One smooth egg shaped blob for head and body together */
+  BODY:
+    "M60 34 C88 34 97 60 97 87 C97 110 81 122 60 122 C39 122 23 110 23 87 C23 60 32 34 60 34 Z",
 
   paw(x, y) {
     return `<circle cx="${x}" cy="${y}" r="9" fill="${BUNNY.CREAM}" stroke="${BUNNY.LINE}" stroke-width="2.5"/>`;
@@ -769,8 +758,7 @@ const BUNNY = {
         ${p.extra.includes("BEHIND:") ? p.extra.split("BEHIND:")[1] : ""}
         ${ear(43, -7, true)}${ear(77, 7, true)}
         <path d="M86 15 c3 -4.2 9 -1.8 9 2.4 c0 3.6 -4.8 6.6 -9 9 c-4.2 -2.4 -9 -5.4 -9 -9 c0 -4.2 6 -6.6 9 -2.4z" fill="${B.HEART}"/>
-        ${B.fluffCircles(true)}
-        ${B.fluffCircles(false)}
+        <path d="${B.BODY}" fill="${B.CREAM}" stroke="${B.LINE}" stroke-width="3"/>
         <circle cx="36" cy="83" r="7" fill="${B.BLUSH}" opacity="0.8"/>
         <circle cx="84" cy="83" r="7" fill="${B.BLUSH}" opacity="0.8"/>
         <g class="eyes-group">${leftEye}${rightEye}</g>
@@ -931,9 +919,9 @@ const CHAT_TOPICS = [
   { keys: ["help", "confused", "question", "how does"], a: "Happy to help! You can ask me about blind boxes, prices, shipping, the lucky variant, or how ordering works ♡" },
   { keys: ["lucky", "variant", "rare", "secret", "chase"], a: "Ooh, the lucky variant! Soft Landing has three regular designs plus one lucky variant, so four designs in total. Any box could be the lucky one…" },
   { keys: ["blind box", "blindbox", "blind-box", "surprise", "mystery"], a: "A blind box is a sealed little mystery! You won't know which of the four designs is inside until you open it. That's the best part ♡" },
-  { keys: ["set", "all of them", "every design", "duplicates"], a: "The Whole Set is 4 blind boxes, one of each design, for $46.99. No duplicates, and it saves you $4.97 versus singles!" },
+  { keys: ["set", "all of them", "every design", "duplicates"], a: "The Whole Set is 4 blind boxes, one of each design, for $19.99. No duplicates, and it saves you $3.97 versus singles!" },
   { keys: ["ship", "shipping cost", "deliver", "mail", "arrive"], a: "Shipping is a flat $4.99, and free once your order reaches $40!" },
-  { keys: ["price", "cost", "how much", "expensive"], a: "A single blind box is $12.99, and the whole set of 4 is $46.99 ♡" },
+  { keys: ["price", "cost", "how much", "expensive"], a: "A single blind box is $5.99, and the whole set of 4 is $19.99 ♡" },
   { keys: ["flip", "anti", "ring", "facing", "backwards"], a: "Every holder has two attachment rings so your photo card stays front-facing, always. Zero flips, bunny promise!" },
   { keys: ["fit", "size", "photocard", "photo card", "dimension"], a: "Cordi holders fit standard photo cards, the 55 by 85 mm kind you pull from albums ♡" },
   { keys: ["return", "refund", "cancel", "real card", "charge"], a: "Little secret: this is a demo storefront, so payments are simulated. No real charges, promise!" },

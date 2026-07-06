@@ -84,7 +84,7 @@ function addToCart(id, qty) {
   cart[id] = Math.min((cart[id] || 0) + qty, 99);
   saveCart();
   renderCartUI();
-  mascotReact("excited", "Yay! Added to your cart ♡", 2800);
+  mascotReact("excited", "Yay! Coco tucked it into your cart ♡", 2800);
   toast("Added to cart");
 }
 
@@ -653,7 +653,7 @@ function bindCheckoutPage() {
     }
     if (firstBad) {
       firstBad.querySelector("input").focus();
-      mascotReact("wink", "Almost! Check the highlighted fields.", 3000);
+      mascotReact("wink", "Oops! Coco spotted a field to fix.", 3000);
       return;
     }
 
@@ -884,11 +884,15 @@ function wakeMascot() {
   if (asleep) {
     asleep = false;
     setMascotPose(ROUTE_POSE[currentRouteKey] || "sit", true);
+    sayBubble("Oh! Coco's awake! Did you miss me?", 2600);
   }
   clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
     asleep = true;
-    if (Date.now() >= poseLock) setMascotPose("sleep", true);
+    if (Date.now() >= poseLock) {
+      setMascotPose("sleep", true);
+      sayBubble("Coco's taking a tiny nap… zzz", 3000);
+    }
   }, 45000);
 }
 
@@ -916,14 +920,75 @@ const ROUTE_POSE = {
   confirmation: "star",
 };
 
-const ROUTE_BUBBLE = {
-  home: "Welcome to Cordi Lab!",
-  "our-story": "Ooh, story time!",
-  collections: "Pick me! Pick me!",
-  product: "Which one will you get?",
-  checkout: "Almost there, friend!",
-  confirmation: "Yippee! See you soon!",
+/* Coco's commentary, one pool per page. The first line greets, the rest rotate. */
+const COCO_LINES = {
+  home: [
+    "Welcome to Cordi Lab! I'm Coco ♡",
+    "Psst… have you seen Soft Landing yet?",
+    "Everything here stays facing you. Bunny promise!",
+    "Coco's favorite spot? Right here, watching you browse.",
+  ],
+  "our-story": [
+    "Ooh, story time! Coco loves this part.",
+    "The zero-flip test? I supervised it myself.",
+    "This page always makes me tear up a little ♡",
+    "Every design gets a bunny stamp of approval.",
+  ],
+  collections: [
+    "Pick me! Pick me! (I'm Coco, by the way!)",
+    "One of these boxes hides a lucky variant…",
+    "I helped wrap every single box ♡",
+    "Blind boxes are Coco's favorite kind of surprise!",
+  ],
+  product: [
+    "Coco knows which design is inside… but won't tell!",
+    "Which one will land with you?",
+    "The whole set means no bunny gets left behind ♡",
+    "The wing motifs? Totally Coco's idea.",
+  ],
+  checkout: [
+    "Almost there, friend! Coco is cheering for you!",
+    "I'll guard your cart while you type ♡",
+    "Coco's tip: double check that card number!",
+    "Your blind box is getting so excited!",
+  ],
+  confirmation: [
+    "Yippee! Coco will wave your box goodbye personally!",
+    "Come back and visit Coco soon, okay?",
+    "I wonder which design you'll meet… eee!",
+  ],
 };
+
+let introduced = false;
+let lastLine = "";
+let chatterTimer = null;
+
+function cocoIntroLine(key) {
+  const pool = COCO_LINES[key] || COCO_LINES.home;
+  if (!introduced) {
+    introduced = true;
+    return "Hi! I'm Coco, the Cordi Lab bunny ♡";
+  }
+  return pool[0];
+}
+
+function cocoChatterLine(key) {
+  const pool = COCO_LINES[key] || COCO_LINES.home;
+  const options = pool.filter((l) => l !== lastLine);
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+function scheduleChatter() {
+  clearTimeout(chatterTimer);
+  chatterTimer = setTimeout(() => {
+    if (!asleep && !document.hidden && Date.now() >= poseLock) {
+      const line = cocoChatterLine(currentRouteKey);
+      lastLine = line;
+      sayBubble(line, 4200);
+    }
+    scheduleChatter();
+  }, 13000 + Math.random() * 9000);
+}
 
 let currentRouteKey = "home";
 
@@ -956,8 +1021,11 @@ function render() {
   poseLock = 0;
   asleep = false;
   setMascotPose(ROUTE_POSE[key] || "sit", true);
-  sayBubble(ROUTE_BUBBLE[key], 2800);
+  const line = cocoIntroLine(key);
+  lastLine = line;
+  sayBubble(line, 3200);
   wakeMascot();
+  scheduleChatter();
 }
 
 addEventListener("hashchange", render);

@@ -968,3 +968,107 @@ main:focus { outline: none; }
   box-shadow: 0 12px 30px rgba(35, 32, 25, 0.3);
   animation: bubble-pop 0.25s ease both;
 }
+
+
+/* ---------- Account & Coco Points ---------- */
+
+.header-icons { display: flex; gap: 0.5rem; align-items: center; }
+
+#account-button { text-decoration: none; position: relative; }
+#account-button.on::after {
+  content: "";
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--pink);
+}
+
+.account-page { padding: clamp(3rem, 7vw, 5rem) 0 clamp(3.5rem, 8vw, 6rem); }
+.account-page .display { font-size: clamp(2.4rem, 6vw, 3.6rem); }
+
+.auth-card {
+  max-width: 430px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  margin-top: 2rem;
+}
+
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1.4rem; }
+.auth-tabs button {
+  border: 1.5px solid var(--line);
+  background: var(--cream);
+  border-radius: 10px;
+  padding: 0.6rem;
+  font-weight: 600;
+  color: var(--body);
+}
+.auth-tabs button.active { border-color: var(--pink); color: var(--ink); background: var(--pink-soft); }
+
+.auth-error { color: #c04640; font-size: 0.88rem; margin-bottom: 0.9rem; }
+.auth-note { color: var(--body); font-size: 0.8rem; margin-top: 1rem; line-height: 1.5; }
+
+.points-card {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.6rem 2rem;
+  margin-top: 2rem;
+  max-width: 560px;
+}
+.points-big { font-family: var(--serif); font-size: 3rem; font-weight: 700; color: var(--pink-deep); line-height: 1; }
+.points-label { font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--sage); margin-top: 0.3rem; }
+.points-worth { color: var(--body); max-width: 240px; }
+
+.account-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 2rem;
+  margin-top: 2.5rem;
+  max-width: 760px;
+}
+.account-h2 { font-family: var(--serif); font-size: 1.3rem; margin-bottom: 0.8rem; }
+.points-rules { list-style: none; color: var(--body); display: grid; gap: 0.5rem; }
+.points-rules li::before { content: "♡ "; color: var(--pink); }
+
+.points-history { list-style: none; display: grid; gap: 0.55rem; }
+.points-history li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 1rem;
+  font-size: 0.92rem;
+  color: var(--body);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.5rem;
+}
+.points-history .gain { color: var(--sage); font-weight: 600; }
+.points-history .spend { color: var(--pink-deep); font-weight: 600; }
+.points-history .muted { color: var(--body); opacity: 0.7; }
+
+.muted-note { color: var(--body); font-size: 0.92rem; }
+
+.points-redeem {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--pink-soft);
+  border: 1px solid var(--pink);
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+  font-size: 0.92rem;
+  margin-bottom: 1rem;
+  cursor: pointer;
+}
+.points-redeem input { width: 17px; height: 17px; accent-color: var(--pink-deep); }
+
+.points-nudge { color: var(--body); font-size: 0.88rem; margin-bottom: 1rem; }
+.points-nudge a { color: var(--pink-deep); }
+
+.points-earned { margin-top: 1rem; color: var(--body); }
+.points-earned a { color: var(--pink-deep); }

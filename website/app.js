@@ -190,6 +190,75 @@ drawer.addEventListener("click", (e) => {
   }
 });
 
+
+/* ---------- Accounts and Coco Points (stored in this browser) ---------- */
+
+const USERS_KEY = "cordi-users";
+const SESSION_KEY = "cordi-session";
+const POINTS_PER_DOLLAR = 10;   // earn 10 points per $1 spent
+const POINTS_PER_DISCOUNT = 100; // every 100 points = $1 off
+
+function loadUsers() {
+  try { return JSON.parse(localStorage.getItem(USERS_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveUsers(users) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+async function hashPw(pw) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("cordi:" + pw));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function currentUser() {
+  const email = localStorage.getItem(SESSION_KEY);
+  if (!email) return null;
+  const u = loadUsers()[email];
+  return u ? { email, ...u } : null;
+}
+
+async function signUp(name, email, pw) {
+  email = email.trim().toLowerCase();
+  if (name.trim().length < 2) return "Please enter your name.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return "Please enter a valid email.";
+  if (pw.length < 6) return "Password needs at least 6 characters.";
+  const users = loadUsers();
+  if (users[email]) return "An account with that email already exists here.";
+  users[email] = { name: name.trim(), pw: await hashPw(pw), points: 0, history: [] };
+  saveUsers(users);
+  localStorage.setItem(SESSION_KEY, email);
+  return null;
+}
+
+async function signIn(email, pw) {
+  email = email.trim().toLowerCase();
+  const users = loadUsers();
+  if (!users[email]) return "No account found with that email on this device.";
+  if (users[email].pw !== await hashPw(pw)) return "That password doesn't match.";
+  localStorage.setItem(SESSION_KEY, email);
+  return null;
+}
+
+function signOut() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+function adjustPoints(email, delta, reason) {
+  const users = loadUsers();
+  if (!users[email]) return;
+  users[email].points = Math.max(0, users[email].points + delta);
+  users[email].history.unshift({ delta, reason, date: new Date().toLocaleDateString() });
+  users[email].history = users[email].history.slice(0, 30);
+  saveUsers(users);
+}
+
+function renderAccountUI() {
+  const btn = $("#account-button");
+  if (btn) btn.classList.toggle("on", !!currentUser());
+}
+
 /* ---------- Icons ---------- */
 
 const ICONS = {
@@ -458,6 +527,109 @@ function bindProductPage() {
   }, { passive: true });
 }
 
+
+function pageAccount() {
+  const user = currentUser();
+  if (!user) {
+    return `
+  <div class="page account-page">
+    <div class="container">
+      <p class="eyebrow">Your Burrow</p>
+      <h1 class="display">Join the <span class="accent">fluffle</span></h1>
+      <p class="lead" style="margin-top:1rem">Create an account to collect Coco Points. Earn ${POINTS_PER_DOLLAR} points for every $1 you spend, and every ${POINTS_PER_DISCOUNT} points takes $1 off a future order.</p>
+      <div class="auth-card">
+        <div class="auth-tabs">
+          <button class="active" data-tab="signup">Create account</button>
+          <button data-tab="signin">Sign in</button>
+        </div>
+        <form id="auth-form" novalidate>
+          <div class="field" id="auth-name-field">
+            <label for="a-name">Name</label>
+            <input id="a-name" autocomplete="name" placeholder="Coco Bunny">
+          </div>
+          <div class="field">
+            <label for="a-email">Email</label>
+            <input id="a-email" type="email" autocomplete="email" placeholder="you@example.com">
+          </div>
+          <div class="field">
+            <label for="a-pw">Password</label>
+            <input id="a-pw" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+          </div>
+          <p class="auth-error" id="auth-error" hidden></p>
+          <button type="submit" class="btn btn-pink btn-block" id="auth-submit">Create account</button>
+        </form>
+        <p class="auth-note">Demo accounts live in this browser only. Real cross device accounts arrive with the production launch.</p>
+      </div>
+    </div>
+  </div>`;
+  }
+
+  const dollars = Math.floor(user.points / POINTS_PER_DISCOUNT);
+  const history = (user.history || []).map((h) => `
+    <li><span>${esc(h.reason)}</span><span class="${h.delta >= 0 ? "gain" : "spend"}">${h.delta >= 0 ? "+" : ""}${h.delta} pts</span><span class="muted">${esc(h.date)}</span></li>`).join("");
+
+  return `
+  <div class="page account-page">
+    <div class="container">
+      <p class="eyebrow">Your Burrow</p>
+      <h1 class="display">Hi, <span class="accent">${esc(user.name)}</span></h1>
+      <div class="points-card">
+        <div>
+          <div class="points-big">${user.points}</div>
+          <div class="points-label">Coco Points</div>
+        </div>
+        <p class="points-worth">${dollars > 0 ? `Worth $${dollars} off your next order ♡` : `Earn ${POINTS_PER_DOLLAR} points per $1 spent. ${POINTS_PER_DISCOUNT} points = $1 off.`}</p>
+      </div>
+      <div class="account-columns">
+        <div>
+          <h2 class="account-h2">How points work</h2>
+          <ul class="points-rules">
+            <li>Earn ${POINTS_PER_DOLLAR} points for every $1 you spend</li>
+            <li>Every ${POINTS_PER_DISCOUNT} points = $1 off at checkout</li>
+            <li>Points apply automatically when you choose to redeem</li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="account-h2">Points history</h2>
+          ${history ? `<ul class="points-history">${history}</ul>` : `<p class="muted-note">No points yet. Your first blind box fixes that ♡</p>`}
+        </div>
+      </div>
+      <button class="btn btn-ghost" id="signout-btn" style="margin-top:2rem">Sign out</button>
+    </div>
+  </div>`;
+}
+
+function bindAccountPage() {
+  const so = $("#signout-btn");
+  if (so) {
+    so.addEventListener("click", () => { signOut(); renderAccountUI(); render(); });
+    return;
+  }
+  let mode = "signup";
+  const form = $("#auth-form");
+  const err = $("#auth-error");
+  $$(".auth-tabs button").forEach((b) => b.addEventListener("click", () => {
+    mode = b.dataset.tab;
+    $$(".auth-tabs button").forEach((x) => x.classList.toggle("active", x === b));
+    $("#auth-name-field").style.display = mode === "signup" ? "" : "none";
+    $("#auth-submit").textContent = mode === "signup" ? "Create account" : "Sign in";
+    err.hidden = true;
+  }));
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = $("#a-name").value, email = $("#a-email").value, pw = $("#a-pw").value;
+    const problem = mode === "signup" ? await signUp(name, email, pw) : await signIn(email, pw);
+    if (problem) {
+      err.textContent = problem;
+      err.hidden = false;
+      return;
+    }
+    renderAccountUI();
+    mascotReact("excited", mode === "signup" ? "Welcome to the fluffle! ♡" : "Welcome back! Coco missed you ♡", 2800);
+    render();
+  });
+}
+
 /* ---------- Checkout ---------- */
 
 function pageCheckout() {
@@ -546,6 +718,13 @@ function pageCheckout() {
                 <p class="error">Please enter the 3 or 4 digit code.</p>
               </div>
             </div>
+            ${(() => {
+              const u = currentUser();
+              if (!u) return '<p class="points-nudge">Psst: <a href="#/account">create an account</a> to earn Coco Points on this order.</p>';
+              const maxD = Math.min(Math.floor(u.points / POINTS_PER_DISCOUNT), Math.floor(subtotal));
+              if (maxD < 1) return `<p class="points-nudge">You'll earn Coco Points on this order ♡</p>`;
+              return `<label class="points-redeem"><input type="checkbox" id="use-points" data-discount="${maxD}"> Use ${maxD * POINTS_PER_DISCOUNT} of my ${u.points} Coco Points (−${money(maxD)})</label>`;
+            })()}
             <p class="secure-note">${ICONS.lock} Your details are encrypted and secure. This demo store does not charge real cards.</p>
             <button type="submit" class="btn btn-primary btn-block" id="pay-button">Pay ${money(total)}</button>
           </fieldset>
@@ -555,7 +734,8 @@ function pageCheckout() {
           <h2>Order Summary</h2>
           ${lines}
           <div class="summary-line"><span class="muted">Shipping</span><span>${ship === 0 ? "Free" : money(ship)}</span></div>
-          <div class="summary-total"><span>Total</span><span>${money(total)}</span></div>
+          <div class="summary-line" id="sum-discount" hidden><span class="muted">Coco Points</span><span id="sum-discount-val"></span></div>
+          <div class="summary-total"><span>Total</span><span id="sum-total">${money(total)}</span></div>
         </aside>
       </div>
     </div>
@@ -665,15 +845,38 @@ function bindCheckoutPage() {
 
     // Simulated payment processing
     setTimeout(() => {
+      const usePts = $("#use-points");
+      const discount = usePts && usePts.checked ? Number(usePts.dataset.discount) : 0;
+      const paid = Math.max(0, cartSubtotal() + shippingFor(cartSubtotal()) - discount);
+      const user = currentUser();
+      let earned = 0;
+      if (user) {
+        if (discount > 0) adjustPoints(user.email, -discount * POINTS_PER_DISCOUNT, "Redeemed at checkout");
+        earned = Math.floor(paid * POINTS_PER_DOLLAR);
+        if (earned > 0) adjustPoints(user.email, earned, "Order " + "CL-" + Date.now().toString(36).toUpperCase().slice(-5));
+      }
       lastOrder = {
         number: "CL-" + Date.now().toString(36).toUpperCase(),
-        total: cartSubtotal() + shippingFor(cartSubtotal()),
+        total: paid,
         email: $("#f-email").value.trim(),
+        pointsEarned: earned,
       };
       clearCart();
       location.hash = "#/confirmation";
     }, 1200);
   });
+
+  const usePts = $("#use-points");
+  if (usePts) {
+    usePts.addEventListener("change", () => {
+      const d = usePts.checked ? Number(usePts.dataset.discount) : 0;
+      const total = Math.max(0, cartSubtotal() + shippingFor(cartSubtotal()) - d);
+      $("#sum-discount").hidden = d === 0;
+      $("#sum-discount-val").textContent = "−" + money(d);
+      $("#sum-total").textContent = money(total);
+      $("#pay-button").textContent = "Pay " + money(total);
+    });
+  }
 }
 
 /* ---------- Confirmation ---------- */
@@ -698,6 +901,7 @@ function pageConfirmation() {
       <h1 class="display">Thank you! Your surprise is <span class="accent">on its way.</span></h1>
       <p class="lead">We’ve emailed a receipt to ${esc(lastOrder.email)}. Your blind box will ship soon, and we can’t wait for you to meet whoever’s inside.</p>
       <div class="order-number">Order ${esc(lastOrder.number)} · ${money(lastOrder.total)}</div>
+      ${lastOrder.pointsEarned ? `<p class="points-earned">+${lastOrder.pointsEarned} Coco Points earned ♡ <a href="#/account">See your balance</a></p>` : `<p class="points-earned muted-note"><a href="#/account">Create an account</a> to earn Coco Points next time!</p>`}
       <div><a class="btn btn-primary" href="#/">Back to Home</a></div>
     </div>
   </div>`;
@@ -923,6 +1127,10 @@ const CHAT_TOPICS = [
   { keys: ["coco", "cute", "bunny", "name"], a: "Hehe, that's me! I'm Coco, the Cordi Lab bunny ♡" },
 ];
 
+CHAT_TOPICS.push(
+  { keys: ["point", "loyalty", "reward", "account", "sign up", "signup"], a: "Coco Points! Earn 10 points for every $1 you spend, and every 100 points takes $1 off a future order. Make an account on the Account page (the little bunny-person icon up top) to start collecting ♡" }
+);
+
 const CHAT_FALLBACK =
   "Hmm, Coco's not sure about that one! Try asking about blind boxes, prices, shipping, or the lucky variant ♡";
 
@@ -1028,6 +1236,7 @@ const ROUTES = {
   collections: { render: pageCollections, nav: "collections" },
   product: { render: pageProduct, nav: "collections", bind: bindProductPage },
   checkout: { render: pageCheckout, nav: null, bind: bindCheckoutPage },
+  account: { render: pageAccount, nav: null, bind: bindAccountPage },
   confirmation: { render: pageConfirmation, nav: null },
 };
 
@@ -1037,6 +1246,7 @@ const ROUTE_POSE = {
   collections: "wink",
   product: "sit",
   checkout: "heart",
+  account: "heart",
   confirmation: "star",
 };
 
@@ -1071,6 +1281,11 @@ const COCO_LINES = {
     "I'll guard your cart while you type ♡",
     "Coco's tip: double check that card number!",
     "Your blind box is getting so excited!",
+  ],
+  account: [
+    "Welcome to your burrow!",
+    "Coco Points add up fast, promise ♡",
+    "Every 100 points is a dollar off. Coco math!",
   ],
   confirmation: [
     "Yippee! Coco will wave your box goodbye personally!",
@@ -1119,6 +1334,7 @@ function resolveRoute() {
   if (hash === "collections") return "collections";
   if (hash === "collections/soft-landing") return "product";
   if (hash === "checkout") return "checkout";
+  if (hash === "account") return "account";
   if (hash === "confirmation") return "confirmation";
   return "home";
 }
@@ -1138,6 +1354,7 @@ function render() {
   scrollTo({ top: 0, behavior: "instant" });
   closeCart();
 
+  renderAccountUI();
   poseLock = 0;
   asleep = false;
   setMascotPose(ROUTE_POSE[key] || "sit", true);

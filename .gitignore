@@ -8,3 +8,4 @@ memory.json
 wandb/
 .weave_log/
 !website/img/*
+!website/design/box/*

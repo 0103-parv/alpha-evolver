@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cordi Lab — Photocard Accessories</title>
+<meta name="description" content="Collectible blind box accessories designed to keep your photo cards front-facing.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%B0%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <a class="brand" href="#/">Cordi <span>Lab</span></a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a href="#/" data-nav="home">Home</a>
+    <a href="#/our-story" data-nav="our-story">Our Story</a>
+    <a href="#/collections" data-nav="collections">Collections</a>
+  </nav>
+  <button class="cart-button" id="cart-button" aria-label="Open cart">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M6 7h12l-1.2 12.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8L6 7z"/>
+      <path d="M9 9V6a3 3 0 0 1 6 0v3"/>
+    </svg>
+    <span class="cart-count" id="cart-count" hidden>0</span>
+  </button>
+</header>
+
+<main id="app" tabindex="-1"></main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div>
+      <p class="footer-brand">Cordi <span>Lab</span></p>
+      <p class="footer-tag">Keeping your favorite moments front-facing, always.</p>
+    </div>
+    <nav class="footer-nav" aria-label="Footer navigation">
+      <a href="#/">Home</a>
+      <a href="#/our-story">Our Story</a>
+      <a href="#/collections">Collections</a>
+    </nav>
+  </div>
+  <p class="footer-note">&copy; 2026 Cordi Lab. Demo storefront, payments are simulated.</p>
+</footer>
+
+<!-- Cart drawer -->
+<div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+<aside class="cart-drawer" id="cart-drawer" aria-label="Shopping cart" aria-hidden="true">
+  <div class="cart-drawer-head">
+    <h2>Your Cart</h2>
+    <button class="icon-button" id="cart-close" aria-label="Close cart">&times;</button>
+  </div>
+  <div class="cart-items" id="cart-items"></div>
+  <div class="cart-drawer-foot" id="cart-foot"></div>
+</aside>
+
+<!-- Mascot -->
+<div class="mascot" id="mascot" aria-hidden="true">
+  <div class="mascot-bubble" id="mascot-bubble" hidden></div>
+  <div class="mascot-stage" id="mascot-stage"></div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

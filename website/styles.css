@@ -391,10 +391,13 @@ main:focus { outline: none; }
   .product-layout { grid-template-columns: 1fr; }
 }
 
+.product-layout > * { min-width: 0; }
+
 .gallery { position: relative; }
 
 .gallery-track {
   display: flex;
+  align-items: flex-start;
   gap: 1rem;
   overflow-x: auto;
   scroll-snap-type: x mandatory;

@@ -338,10 +338,9 @@ function pageCollections() {
 }
 
 const GALLERY_IMAGES = [
-  { src: "img/soft-landing-1.png", alt: "Soft Landing photo card holder, three quarter view" },
-  { src: "img/soft-landing-2.png", alt: "Soft Landing photo card holder, front view" },
-  { src: "img/soft-landing-3.png", alt: "Soft Landing photo card holder, back view" },
-  { src: "img/soft-landing-4.png", alt: "Soft Landing photo card holder, detail of star and ring holes" },
+  { src: "img/product-2.png", alt: "Soft Landing holder in white with silver wings, star, and like counter" },
+  { src: "img/product-3.png", alt: "Soft Landing holder in white with black wings and snowflakes" },
+  { src: "img/product-1.png", alt: "Soft Landing holder in mocha fur with chocolate wings and stars" },
 ];
 const GALLERY_SLIDES = GALLERY_IMAGES.length;
 

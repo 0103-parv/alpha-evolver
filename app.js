@@ -233,7 +233,7 @@ function pageHome() {
         <div class="strip-item">
           <div class="strip-icon">${ICONS.box}</div>
           <h3>Blind Box Joy</h3>
-          <p>Every accessory arrives as a surprise. Four designs and one lucky variant per series.</p>
+          <p>Every accessory arrives as a surprise. Three designs plus one lucky variant in every series.</p>
         </div>
         <div class="strip-item">
           <div class="strip-icon">${ICONS.sparkle}</div>
@@ -249,7 +249,7 @@ function pageHome() {
           <div>
             <p class="eyebrow">Now Available</p>
             <h2>Meet <span class="accent">Soft Landing</span>, our debut series</h2>
-            <p>Four collectible designs and one lucky variant, inspired by soft fur details and wing motifs. Which one will land with you?</p>
+            <p>Three collectible designs plus one lucky variant, inspired by soft fur details and wing motifs. Which one will land with you?</p>
             <a class="btn btn-primary" href="#/collections/soft-landing">View the Series</a>
           </div>
           <div class="feature-visual"><div class="mystery-box">?</div></div>
@@ -328,7 +328,7 @@ function pageCollections() {
           </div>
           <div class="series-info">
             <h3>Soft Landing</h3>
-            <p>Four collectible designs plus one lucky variant, inspired by soft fur details and wing motifs.</p>
+            <p>Three collectible designs plus one lucky variant, inspired by soft fur details and wing motifs.</p>
             <div class="series-cta">Explore the series →</div>
           </div>
         </a>
@@ -367,7 +367,7 @@ function pageProduct() {
         <div class="product-info">
           <p class="eyebrow">Debut Series</p>
           <h1>Soft <span class="accent">Landing</span></h1>
-          <p class="product-tagline">A blind box photo card holder series. Four designs, one lucky variant, endless anti-flip peace of mind.</p>
+          <p class="product-tagline">A blind box photo card holder series. Three designs, one lucky variant, endless anti-flip peace of mind.</p>
 
           <div class="option-group">
             <span>Choose your box</span>
@@ -704,54 +704,77 @@ function pageConfirmation() {
 /* ---------- Mascot ---------- */
 
 const BUNNY = {
+  CREAM: "#fdf6ec",
+  LINE: "#e2ccb6",
+  EAR_PINK: "#f8ccd3",
+  BLUSH: "#f7bac6",
+  HEART: "#f091a3",
+  INK: "#3b2f26",
+
+  /* Fluffy cloud silhouette: stroked circles first, then the same circles
+     fill-only on top so only the outer scalloped edge keeps an outline. */
+  FLUFF: [
+    [60, 80, 33], [40, 60, 17], [80, 60, 17], [60, 51, 19],
+    [31, 82, 14], [89, 82, 14], [41, 103, 12], [79, 103, 12], [60, 108, 13],
+  ],
+
+  fluffCircles(stroke) {
+    return BUNNY.FLUFF.map(([x, y, r]) =>
+      `<circle cx="${x}" cy="${y}" r="${r}" fill="${BUNNY.CREAM}"${
+        stroke ? ` stroke="${BUNNY.LINE}" stroke-width="3"` : ""
+      }/>`
+    ).join("");
+  },
+
+  paw(x, y) {
+    return `<circle cx="${x}" cy="${y}" r="9" fill="${BUNNY.CREAM}" stroke="${BUNNY.LINE}" stroke-width="2.5"/>`;
+  },
+
   base(parts) {
-    const p = Object.assign({ eyes: "open", extra: "", arms: "down", ears: "" }, parts);
+    const p = Object.assign({ eyes: "open", extra: "", arms: "down" }, parts);
+    const B = BUNNY;
 
     const eyeOpen = (cx) =>
-      `<g class="eye"><circle cx="${cx}" cy="62" r="5.2" fill="#3a2e26"/>` +
-      `<circle class="pupil-glint" cx="${cx + 1.6}" cy="60.2" r="1.6" fill="#fff"/></g>`;
+      `<g class="eye"><circle cx="${cx}" cy="72" r="6" fill="${B.INK}"/>` +
+      `<circle cx="${cx + 2}" cy="70" r="2" fill="#fff"/>` +
+      `<circle cx="${cx - 2}" cy="74" r="1" fill="#fff" opacity="0.9"/></g>`;
     const eyeWink = (cx) =>
-      `<path d="M${cx - 5} 62 q5 -5 10 0" stroke="#3a2e26" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+      `<path d="M${cx - 5.5} 72 q5.5 -5 11 0" stroke="${B.INK}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
     const eyeSleep = (cx) =>
-      `<path d="M${cx - 5} 63 q5 4 10 0" stroke="#3a2e26" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+      `<path d="M${cx - 5.5} 73 q5.5 4.5 11 0" stroke="${B.INK}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
     const eyeHappy = (cx) =>
-      `<path d="M${cx - 5} 63 q5 -6 10 0" stroke="#3a2e26" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+      `<path d="M${cx - 5.5} 73 q5.5 -6.5 11 0" stroke="${B.INK}" stroke-width="2.8" fill="none" stroke-linecap="round"/>`;
 
     let leftEye, rightEye;
-    if (p.eyes === "open") { leftEye = eyeOpen(47); rightEye = eyeOpen(73); }
-    else if (p.eyes === "wink") { leftEye = eyeOpen(47); rightEye = eyeWink(73); }
-    else if (p.eyes === "sleep") { leftEye = eyeSleep(47); rightEye = eyeSleep(73); }
-    else { leftEye = eyeHappy(47); rightEye = eyeHappy(73); }
+    if (p.eyes === "open") { leftEye = eyeOpen(46); rightEye = eyeOpen(74); }
+    else if (p.eyes === "wink") { leftEye = eyeOpen(46); rightEye = eyeWink(74); }
+    else if (p.eyes === "sleep") { leftEye = eyeSleep(46); rightEye = eyeSleep(74); }
+    else { leftEye = eyeHappy(46); rightEye = eyeHappy(74); }
 
-    const armsDown =
-      `<circle cx="34" cy="88" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>` +
-      `<circle cx="86" cy="88" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>`;
-    const armsUp =
-      `<circle cx="26" cy="62" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>` +
-      `<circle cx="94" cy="62" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>`;
-    const armsFront =
-      `<circle cx="44" cy="94" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>` +
-      `<circle cx="76" cy="94" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>`;
+    const arms =
+      p.arms === "up" ? B.paw(25, 58) + B.paw(95, 58) :
+      p.arms === "front" ? B.paw(46, 99) + B.paw(74, 99) :
+      B.paw(31, 92) + B.paw(89, 92);
 
-    const arms = p.arms === "up" ? armsUp : p.arms === "front" ? armsFront : armsDown;
+    const ear = (cx, rot, tuft) =>
+      `<g transform="rotate(${rot} ${cx} 30)">` +
+      `<ellipse cx="${cx}" cy="28" rx="11.5" ry="22" fill="${B.CREAM}" stroke="${B.LINE}" stroke-width="3"/>` +
+      `<ellipse cx="${cx}" cy="31" rx="5.5" ry="13" fill="${B.EAR_PINK}"/>` +
+      (tuft ? `<circle cx="${cx}" cy="10" r="5" fill="${B.CREAM}" stroke="${B.LINE}" stroke-width="2"/>` : "") +
+      `</g>`;
 
     return `
     <svg viewBox="0 0 120 130" xmlns="http://www.w3.org/2000/svg">
       <g class="pose">
         ${p.extra.includes("BEHIND:") ? p.extra.split("BEHIND:")[1] : ""}
-        <g class="ears">
-          <ellipse cx="44" cy="26" rx="10" ry="21" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2" transform="rotate(-8 44 26)"/>
-          <ellipse cx="44" cy="29" rx="5" ry="13" fill="#f6d3d7" transform="rotate(-8 44 29)"/>
-          <ellipse cx="76" cy="26" rx="10" ry="21" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2" transform="rotate(8 76 26)"/>
-          <ellipse cx="76" cy="29" rx="5" ry="13" fill="#f6d3d7" transform="rotate(8 76 29)"/>
-          <path d="M84 14 c2.5 -3.5 7.5 -1.5 7.5 2 c0 3 -4 5.5 -7.5 7.5 c-3.5 -2 -7.5 -4.5 -7.5 -7.5 c0 -3.5 5 -5.5 7.5 -2z" fill="#ef9aa6"/>
-        </g>
-        <ellipse cx="60" cy="96" rx="32" ry="24" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>
-        <circle cx="60" cy="60" r="30" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>
-        <circle cx="40" cy="70" r="6" fill="#f6bfc6" opacity="0.85"/>
-        <circle cx="80" cy="70" r="6" fill="#f6bfc6" opacity="0.85"/>
+        ${ear(43, -7, true)}${ear(77, 7, true)}
+        <path d="M86 15 c3 -4.2 9 -1.8 9 2.4 c0 3.6 -4.8 6.6 -9 9 c-4.2 -2.4 -9 -5.4 -9 -9 c0 -4.2 6 -6.6 9 -2.4z" fill="${B.HEART}"/>
+        ${B.fluffCircles(true)}
+        ${B.fluffCircles(false)}
+        <circle cx="36" cy="83" r="7" fill="${B.BLUSH}" opacity="0.8"/>
+        <circle cx="84" cy="83" r="7" fill="${B.BLUSH}" opacity="0.8"/>
         <g class="eyes-group">${leftEye}${rightEye}</g>
-        <path d="M57 71 q3 2.6 6 0" stroke="#3a2e26" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M55 83 q2.5 2.6 5 0 q2.5 2.6 5 0" stroke="${B.INK}" stroke-width="2" fill="none" stroke-linecap="round"/>
         ${arms}
         ${p.extra.includes("BEHIND:") ? "" : p.extra}
       </g>
@@ -766,7 +789,7 @@ const BUNNY = {
         eyes: "happy",
         arms: "up",
         extra:
-          `<path d="M14 40 l4 -8 M22 34 l1 -8 M100 34 l-1 -8 M106 40 l-4 -8" stroke="#e8a0aa" stroke-width="2.4" stroke-linecap="round"/>`,
+          `<path d="M12 44 l4 -8 M20 38 l1 -8 M100 38 l-1 -8 M108 44 l-4 -8" stroke="#e8a0aa" stroke-width="2.4" stroke-linecap="round"/>`,
       });
     },
     heart() {
@@ -774,7 +797,7 @@ const BUNNY = {
         eyes: "happy",
         arms: "front",
         extra:
-          `<path d="M60 84 c6 -9 19 -4 19 5 c0 8 -10 14 -19 19 c-9 -5 -19 -11 -19 -19 c0 -9 13 -14 19 -5z" fill="#ef9aa6"/>`,
+          `<path d="M60 90 c6 -9 19 -4 19 5 c0 8 -10 14 -19 19 c-9 -5 -19 -11 -19 -19 c0 -9 13 -14 19 -5z" fill="#f091a3"/>`,
       });
     },
     star() {
@@ -782,7 +805,7 @@ const BUNNY = {
         eyes: "open",
         arms: "front",
         extra:
-          `<path d="M60 80 l4.6 9.3 10.4 1.5 -7.5 7.3 1.8 10.3 -9.3 -4.9 -9.3 4.9 1.8 -10.3 -7.5 -7.3 10.4 -1.5z" fill="#f7d67c" stroke="#e8bd55" stroke-width="1.5"/>`,
+          `<path d="M60 86 l4.6 9.3 10.4 1.5 -7.5 7.3 1.8 10.3 -9.3 -4.9 -9.3 4.9 1.8 -10.3 -7.5 -7.3 10.4 -1.5z" fill="#f7d67c" stroke="#e8bd55" stroke-width="1.5"/>`,
       });
     },
     reading() {
@@ -790,16 +813,16 @@ const BUNNY = {
         eyes: "sleep",
         arms: "front",
         extra:
-          `<g><path d="M38 86 q22 -8 44 0 l0 22 q-22 -8 -44 0z" fill="#f2aab4" stroke="#dd8f9b" stroke-width="1.5"/>` +
-          `<path d="M60 82.5 l0 22" stroke="#dd8f9b" stroke-width="1.5"/></g>`,
+          `<g><path d="M38 92 q22 -8 44 0 l0 22 q-22 -8 -44 0z" fill="#f2aab4" stroke="#dd8f9b" stroke-width="1.5"/>` +
+          `<path d="M60 88.5 l0 22" stroke="#dd8f9b" stroke-width="1.5"/></g>`,
       });
     },
     sleep() {
       return BUNNY.base({
         eyes: "sleep",
         extra:
-          `<text x="92" y="38" font-family="Georgia, serif" font-size="13" fill="#b9a893" font-style="italic">z</text>` +
-          `<text x="100" y="28" font-family="Georgia, serif" font-size="16" fill="#b9a893" font-style="italic">z</text>`,
+          `<text x="94" y="42" font-family="Georgia, serif" font-size="13" fill="#b9a893" font-style="italic">z</text>` +
+          `<text x="102" y="30" font-family="Georgia, serif" font-size="16" fill="#b9a893" font-style="italic">z</text>`,
       });
     },
     parachute() {
@@ -807,8 +830,8 @@ const BUNNY = {
         eyes: "open",
         extra:
           "BEHIND:" +
-          `<g><path d="M18 30 a42 34 0 0 1 84 0 q-10 8 -21 0 q-10 8 -21 0 q-10 8 -21 0 q-10 8 -21 0z" fill="#f2aab4" stroke="#dd8f9b" stroke-width="1.5" opacity="0.95"/>` +
-          `<path d="M22 32 L38 58 M60 34 L60 52 M98 32 L82 58" stroke="#c9b6a2" stroke-width="1.4"/></g>`,
+          `<g><path d="M18 28 a42 34 0 0 1 84 0 q-10 8 -21 0 q-10 8 -21 0 q-10 8 -21 0 q-10 8 -21 0z" fill="#f2aab4" stroke="#dd8f9b" stroke-width="1.5" opacity="0.95"/>` +
+          `<path d="M22 30 L40 58 M60 32 L60 50 M98 30 L80 58" stroke="#c9b6a2" stroke-width="1.4"/></g>`,
       });
     },
   },
@@ -834,6 +857,7 @@ function setMascotPose(pose, force) {
 }
 
 function sayBubble(text, ms) {
+  if (typeof chatOpen !== "undefined" && chatOpen) return;
   mascotBubble.textContent = text;
   mascotBubble.hidden = false;
   clearTimeout(sayBubble._t);
@@ -899,6 +923,123 @@ function wakeMascot() {
 ["scroll", "keydown", "touchstart"].forEach((ev) =>
   addEventListener(ev, wakeMascot, { passive: true })
 );
+
+/* ---------- Coco chat ---------- */
+
+const CHAT_TOPICS = [
+  { keys: ["hi", "hello", "hey", "sup", "yo "], a: "Hi hi! I'm Coco ♡ Ask me about blind boxes, prices, shipping, or the lucky variant!" },
+  { keys: ["help", "confused", "question", "how does"], a: "Happy to help! You can ask me about blind boxes, prices, shipping, the lucky variant, or how ordering works ♡" },
+  { keys: ["lucky", "variant", "rare", "secret", "chase"], a: "Ooh, the lucky variant! Soft Landing has three regular designs plus one lucky variant, so four designs in total. Any box could be the lucky one…" },
+  { keys: ["blind box", "blindbox", "blind-box", "surprise", "mystery"], a: "A blind box is a sealed little mystery! You won't know which of the four designs is inside until you open it. That's the best part ♡" },
+  { keys: ["set", "all of them", "every design", "duplicates"], a: "The Whole Set is 4 blind boxes, one of each design, for $46.99. No duplicates, and it saves you $4.97 versus singles!" },
+  { keys: ["ship", "shipping cost", "deliver", "mail", "arrive"], a: "Shipping is a flat $4.99, and free once your order reaches $40!" },
+  { keys: ["price", "cost", "how much", "expensive"], a: "A single blind box is $12.99, and the whole set of 4 is $46.99 ♡" },
+  { keys: ["flip", "anti", "ring", "facing", "backwards"], a: "Every holder has two attachment rings so your photo card stays front-facing, always. Zero flips, bunny promise!" },
+  { keys: ["fit", "size", "photocard", "photo card", "dimension"], a: "Cordi holders fit standard photo cards, the 55 by 85 mm kind you pull from albums ♡" },
+  { keys: ["return", "refund", "cancel", "real card", "charge"], a: "Little secret: this is a demo storefront, so payments are simulated. No real charges, promise!" },
+  { keys: ["order", "track", "status", "receipt"], a: "Demo orders don't really ship (yet!), so your order number is just a keepsake for now ♡" },
+  { keys: ["buy", "checkout", "cart", "pay", "purchase"], a: "Open Collections, pick Soft Landing, choose a single box or the whole set, then tap the cart up top to check out. I'll cheer the whole way!" },
+  { keys: ["story", "about", "cordi", "brand", "who made"], a: "Cordi Lab was born from a collector's frustration with flipped photo cards. The whole story is on the Our Story page ♡" },
+  { keys: ["photo", "picture", "image", "prototype"], a: "Product photos are coming soon! We're waiting on the box and prototype, and I can't wait to show you." },
+  { keys: ["coco", "cute", "bunny", "name"], a: "Hehe, that's me! I'm Coco, the Cordi Lab bunny ♡" },
+];
+
+const CHAT_FALLBACK =
+  "Hmm, Coco's not sure about that one! Try asking about blind boxes, prices, shipping, or the lucky variant ♡";
+
+const CHAT_CHIPS = ["What's a blind box?", "Shipping", "The lucky variant", "How do I order?"];
+
+function cocoAnswer(question) {
+  const t = question.toLowerCase();
+  let best = null;
+  let bestScore = 0;
+  for (const topic of CHAT_TOPICS) {
+    let score = 0;
+    for (const k of topic.keys) {
+      // Keys match at word starts only, so "hi" can't hide inside "shipping"
+      const re = new RegExp("\\b" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      if (re.test(t)) score++;
+    }
+    if (score > bestScore) { bestScore = score; best = topic; }
+  }
+  return best ? best.a : CHAT_FALLBACK;
+}
+
+const chatEl = $("#coco-chat");
+const chatMessages = $("#coco-chat-messages");
+const chatChips = $("#coco-chat-chips");
+const chatForm = $("#coco-chat-form");
+const chatInput = $("#coco-chat-input");
+
+let chatOpen = false;
+let chatGreeted = false;
+
+function pushChatMsg(text, who) {
+  const el = document.createElement("div");
+  el.className = "chat-msg " + who;
+  el.textContent = text;
+  chatMessages.appendChild(el);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  return el;
+}
+
+function cocoReplyTo(question) {
+  const typing = pushChatMsg("Coco is typing…", "coco typing");
+  setTimeout(() => {
+    typing.classList.remove("typing");
+    typing.textContent = cocoAnswer(question);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }, 550 + Math.random() * 500);
+}
+
+function askCoco(question) {
+  pushChatMsg(question, "user");
+  cocoReplyTo(question);
+}
+
+function openChat() {
+  chatOpen = true;
+  chatEl.hidden = false;
+  mascotBubble.hidden = true;
+  if (!chatGreeted) {
+    chatGreeted = true;
+    pushChatMsg("Hi! I'm Coco ♡ Confused about anything, or just curious? Ask away, or tap a question below!", "coco");
+    chatChips.innerHTML = CHAT_CHIPS
+      .map((c) => `<button type="button">${esc(c)}</button>`)
+      .join("");
+  }
+  chatInput.focus();
+  setMascotPose("excited", true);
+  setTimeout(() => { if (chatOpen) setMascotPose(ROUTE_POSE[currentRouteKey] || "sit", true); }, 900);
+}
+
+function closeChat() {
+  chatOpen = false;
+  chatEl.hidden = true;
+}
+
+$("#mascot-stage").addEventListener("click", () => {
+  wakeMascot();
+  chatOpen ? closeChat() : openChat();
+});
+$("#coco-chat-close").addEventListener("click", closeChat);
+
+chatChips.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (btn) askCoco(btn.textContent);
+});
+
+chatForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = chatInput.value.trim();
+  if (!q) return;
+  chatInput.value = "";
+  askCoco(q);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeChat();
+});
 
 /* ---------- Router ---------- */
 
@@ -981,7 +1122,7 @@ function cocoChatterLine(key) {
 function scheduleChatter() {
   clearTimeout(chatterTimer);
   chatterTimer = setTimeout(() => {
-    if (!asleep && !document.hidden && Date.now() >= poseLock) {
+    if (!asleep && !chatOpen && !document.hidden && Date.now() >= poseLock) {
       const line = cocoChatterLine(currentRouteKey);
       lastLine = line;
       sayBubble(line, 4200);

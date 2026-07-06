@@ -337,16 +337,18 @@ function pageCollections() {
   </div>`;
 }
 
-const GALLERY_SLIDES = 4;
+const GALLERY_IMAGES = [
+  { src: "img/soft-landing-1.png", alt: "Soft Landing photo card holder, three quarter view" },
+  { src: "img/soft-landing-2.png", alt: "Soft Landing photo card holder, front view" },
+  { src: "img/soft-landing-3.png", alt: "Soft Landing photo card holder, back view" },
+  { src: "img/soft-landing-4.png", alt: "Soft Landing photo card holder, detail of star and ring holes" },
+];
+const GALLERY_SLIDES = GALLERY_IMAGES.length;
 
 function pageProduct() {
-  const slides = Array.from({ length: GALLERY_SLIDES }, (_, i) => `
+  const slides = GALLERY_IMAGES.map((img, i) => `
     <div class="gallery-slide" role="group" aria-label="Photo ${i + 1} of ${GALLERY_SLIDES}">
-      <div class="gallery-empty">
-        <span class="sparkle">✧</span>
-        <strong>Photos coming soon</strong>
-        <span>Box and prototype reveal on the way!</span>
-      </div>
+      <img src="${img.src}" alt="${esc(img.alt)}" loading="${i === 0 ? "eager" : "lazy"}">
     </div>`).join("");
 
   const dots = Array.from({ length: GALLERY_SLIDES }, (_, i) =>
@@ -362,6 +364,7 @@ function pageProduct() {
           <button class="gallery-nav prev" id="gallery-prev" aria-label="Previous photo">←</button>
           <button class="gallery-nav next" id="gallery-next" aria-label="Next photo">→</button>
           <div class="gallery-dots" id="gallery-dots">${dots}</div>
+          <p class="gallery-note">Concept renders. Production photos coming soon!</p>
         </div>
 
         <div class="product-info">

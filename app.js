@@ -704,65 +704,54 @@ function pageConfirmation() {
 /* ---------- Mascot ---------- */
 
 const BUNNY = {
-  CREAM: "#fdf6ec",
-  LINE: "#e2ccb6",
-  EAR_PINK: "#f8ccd3",
-  BLUSH: "#f7bac6",
-  HEART: "#f091a3",
-  INK: "#3b2f26",
-
-  /* One smooth egg shaped blob for head and body together */
-  BODY:
-    "M60 34 C88 34 97 60 97 87 C97 110 81 122 60 122 C39 122 23 110 23 87 C23 60 32 34 60 34 Z",
-
-  paw(x, y) {
-    return `<circle cx="${x}" cy="${y}" r="9" fill="${BUNNY.CREAM}" stroke="${BUNNY.LINE}" stroke-width="2.5"/>`;
-  },
-
   base(parts) {
-    const p = Object.assign({ eyes: "open", extra: "", arms: "down" }, parts);
-    const B = BUNNY;
+    const p = Object.assign({ eyes: "open", extra: "", arms: "down", ears: "" }, parts);
 
     const eyeOpen = (cx) =>
-      `<g class="eye"><circle cx="${cx}" cy="72" r="6" fill="${B.INK}"/>` +
-      `<circle cx="${cx + 2}" cy="70" r="2" fill="#fff"/>` +
-      `<circle cx="${cx - 2}" cy="74" r="1" fill="#fff" opacity="0.9"/></g>`;
+      `<g class="eye"><circle cx="${cx}" cy="62" r="5.2" fill="#3a2e26"/>` +
+      `<circle class="pupil-glint" cx="${cx + 1.6}" cy="60.2" r="1.6" fill="#fff"/></g>`;
     const eyeWink = (cx) =>
-      `<path d="M${cx - 5.5} 72 q5.5 -5 11 0" stroke="${B.INK}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+      `<path d="M${cx - 5} 62 q5 -5 10 0" stroke="#3a2e26" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
     const eyeSleep = (cx) =>
-      `<path d="M${cx - 5.5} 73 q5.5 4.5 11 0" stroke="${B.INK}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+      `<path d="M${cx - 5} 63 q5 4 10 0" stroke="#3a2e26" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
     const eyeHappy = (cx) =>
-      `<path d="M${cx - 5.5} 73 q5.5 -6.5 11 0" stroke="${B.INK}" stroke-width="2.8" fill="none" stroke-linecap="round"/>`;
+      `<path d="M${cx - 5} 63 q5 -6 10 0" stroke="#3a2e26" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
 
     let leftEye, rightEye;
-    if (p.eyes === "open") { leftEye = eyeOpen(46); rightEye = eyeOpen(74); }
-    else if (p.eyes === "wink") { leftEye = eyeOpen(46); rightEye = eyeWink(74); }
-    else if (p.eyes === "sleep") { leftEye = eyeSleep(46); rightEye = eyeSleep(74); }
-    else { leftEye = eyeHappy(46); rightEye = eyeHappy(74); }
+    if (p.eyes === "open") { leftEye = eyeOpen(47); rightEye = eyeOpen(73); }
+    else if (p.eyes === "wink") { leftEye = eyeOpen(47); rightEye = eyeWink(73); }
+    else if (p.eyes === "sleep") { leftEye = eyeSleep(47); rightEye = eyeSleep(73); }
+    else { leftEye = eyeHappy(47); rightEye = eyeHappy(73); }
 
-    const arms =
-      p.arms === "up" ? B.paw(25, 58) + B.paw(95, 58) :
-      p.arms === "front" ? B.paw(46, 99) + B.paw(74, 99) :
-      B.paw(31, 92) + B.paw(89, 92);
+    const armsDown =
+      `<circle cx="34" cy="88" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>` +
+      `<circle cx="86" cy="88" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>`;
+    const armsUp =
+      `<circle cx="26" cy="62" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>` +
+      `<circle cx="94" cy="62" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>`;
+    const armsFront =
+      `<circle cx="44" cy="94" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>` +
+      `<circle cx="76" cy="94" r="9" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>`;
 
-    const ear = (cx, rot, tuft) =>
-      `<g transform="rotate(${rot} ${cx} 30)">` +
-      `<ellipse cx="${cx}" cy="28" rx="11.5" ry="22" fill="${B.CREAM}" stroke="${B.LINE}" stroke-width="3"/>` +
-      `<ellipse cx="${cx}" cy="31" rx="5.5" ry="13" fill="${B.EAR_PINK}"/>` +
-      (tuft ? `<circle cx="${cx}" cy="10" r="5" fill="${B.CREAM}" stroke="${B.LINE}" stroke-width="2"/>` : "") +
-      `</g>`;
+    const arms = p.arms === "up" ? armsUp : p.arms === "front" ? armsFront : armsDown;
 
     return `
     <svg viewBox="0 0 120 130" xmlns="http://www.w3.org/2000/svg">
       <g class="pose">
         ${p.extra.includes("BEHIND:") ? p.extra.split("BEHIND:")[1] : ""}
-        ${ear(43, -7, true)}${ear(77, 7, true)}
-        <path d="M86 15 c3 -4.2 9 -1.8 9 2.4 c0 3.6 -4.8 6.6 -9 9 c-4.2 -2.4 -9 -5.4 -9 -9 c0 -4.2 6 -6.6 9 -2.4z" fill="${B.HEART}"/>
-        <path d="${B.BODY}" fill="${B.CREAM}" stroke="${B.LINE}" stroke-width="3"/>
-        <circle cx="36" cy="83" r="7" fill="${B.BLUSH}" opacity="0.8"/>
-        <circle cx="84" cy="83" r="7" fill="${B.BLUSH}" opacity="0.8"/>
+        <g class="ears">
+          <ellipse cx="44" cy="26" rx="10" ry="21" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2" transform="rotate(-8 44 26)"/>
+          <ellipse cx="44" cy="29" rx="5" ry="13" fill="#f6d3d7" transform="rotate(-8 44 29)"/>
+          <ellipse cx="76" cy="26" rx="10" ry="21" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2" transform="rotate(8 76 26)"/>
+          <ellipse cx="76" cy="29" rx="5" ry="13" fill="#f6d3d7" transform="rotate(8 76 29)"/>
+          <path d="M84 14 c2.5 -3.5 7.5 -1.5 7.5 2 c0 3 -4 5.5 -7.5 7.5 c-3.5 -2 -7.5 -4.5 -7.5 -7.5 c0 -3.5 5 -5.5 7.5 -2z" fill="#ef9aa6"/>
+        </g>
+        <ellipse cx="60" cy="96" rx="32" ry="24" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>
+        <circle cx="60" cy="60" r="30" fill="#fdf6ee" stroke="#dcc9b6" stroke-width="2"/>
+        <circle cx="40" cy="70" r="6" fill="#f6bfc6" opacity="0.85"/>
+        <circle cx="80" cy="70" r="6" fill="#f6bfc6" opacity="0.85"/>
         <g class="eyes-group">${leftEye}${rightEye}</g>
-        <path d="M55 83 q2.5 2.6 5 0 q2.5 2.6 5 0" stroke="${B.INK}" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M57 71 q3 2.6 6 0" stroke="#3a2e26" stroke-width="2" fill="none" stroke-linecap="round"/>
         ${arms}
         ${p.extra.includes("BEHIND:") ? "" : p.extra}
       </g>
@@ -777,7 +766,7 @@ const BUNNY = {
         eyes: "happy",
         arms: "up",
         extra:
-          `<path d="M12 44 l4 -8 M20 38 l1 -8 M100 38 l-1 -8 M108 44 l-4 -8" stroke="#e8a0aa" stroke-width="2.4" stroke-linecap="round"/>`,
+          `<path d="M14 40 l4 -8 M22 34 l1 -8 M100 34 l-1 -8 M106 40 l-4 -8" stroke="#e8a0aa" stroke-width="2.4" stroke-linecap="round"/>`,
       });
     },
     heart() {
@@ -785,7 +774,7 @@ const BUNNY = {
         eyes: "happy",
         arms: "front",
         extra:
-          `<path d="M60 90 c6 -9 19 -4 19 5 c0 8 -10 14 -19 19 c-9 -5 -19 -11 -19 -19 c0 -9 13 -14 19 -5z" fill="#f091a3"/>`,
+          `<path d="M60 84 c6 -9 19 -4 19 5 c0 8 -10 14 -19 19 c-9 -5 -19 -11 -19 -19 c0 -9 13 -14 19 -5z" fill="#ef9aa6"/>`,
       });
     },
     star() {
@@ -793,7 +782,7 @@ const BUNNY = {
         eyes: "open",
         arms: "front",
         extra:
-          `<path d="M60 86 l4.6 9.3 10.4 1.5 -7.5 7.3 1.8 10.3 -9.3 -4.9 -9.3 4.9 1.8 -10.3 -7.5 -7.3 10.4 -1.5z" fill="#f7d67c" stroke="#e8bd55" stroke-width="1.5"/>`,
+          `<path d="M60 80 l4.6 9.3 10.4 1.5 -7.5 7.3 1.8 10.3 -9.3 -4.9 -9.3 4.9 1.8 -10.3 -7.5 -7.3 10.4 -1.5z" fill="#f7d67c" stroke="#e8bd55" stroke-width="1.5"/>`,
       });
     },
     reading() {
@@ -801,16 +790,16 @@ const BUNNY = {
         eyes: "sleep",
         arms: "front",
         extra:
-          `<g><path d="M38 92 q22 -8 44 0 l0 22 q-22 -8 -44 0z" fill="#f2aab4" stroke="#dd8f9b" stroke-width="1.5"/>` +
-          `<path d="M60 88.5 l0 22" stroke="#dd8f9b" stroke-width="1.5"/></g>`,
+          `<g><path d="M38 86 q22 -8 44 0 l0 22 q-22 -8 -44 0z" fill="#f2aab4" stroke="#dd8f9b" stroke-width="1.5"/>` +
+          `<path d="M60 82.5 l0 22" stroke="#dd8f9b" stroke-width="1.5"/></g>`,
       });
     },
     sleep() {
       return BUNNY.base({
         eyes: "sleep",
         extra:
-          `<text x="94" y="42" font-family="Georgia, serif" font-size="13" fill="#b9a893" font-style="italic">z</text>` +
-          `<text x="102" y="30" font-family="Georgia, serif" font-size="16" fill="#b9a893" font-style="italic">z</text>`,
+          `<text x="92" y="38" font-family="Georgia, serif" font-size="13" fill="#b9a893" font-style="italic">z</text>` +
+          `<text x="100" y="28" font-family="Georgia, serif" font-size="16" fill="#b9a893" font-style="italic">z</text>`,
       });
     },
     parachute() {
@@ -818,8 +807,8 @@ const BUNNY = {
         eyes: "open",
         extra:
           "BEHIND:" +
-          `<g><path d="M18 28 a42 34 0 0 1 84 0 q-10 8 -21 0 q-10 8 -21 0 q-10 8 -21 0 q-10 8 -21 0z" fill="#f2aab4" stroke="#dd8f9b" stroke-width="1.5" opacity="0.95"/>` +
-          `<path d="M22 30 L40 58 M60 32 L60 50 M98 30 L80 58" stroke="#c9b6a2" stroke-width="1.4"/></g>`,
+          `<g><path d="M18 30 a42 34 0 0 1 84 0 q-10 8 -21 0 q-10 8 -21 0 q-10 8 -21 0 q-10 8 -21 0z" fill="#f2aab4" stroke="#dd8f9b" stroke-width="1.5" opacity="0.95"/>` +
+          `<path d="M22 32 L38 58 M60 34 L60 52 M98 32 L82 58" stroke="#c9b6a2" stroke-width="1.4"/></g>`,
       });
     },
   },

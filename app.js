@@ -9,12 +9,12 @@ const PRODUCTS = {
     id: "soft-landing-single",
     name: "Soft Landing Blind Box",
     sub: "Single blind box",
-    price: 5.99,
+    price: 7.99,
   },
   "soft-landing-set": {
     id: "soft-landing-set",
     name: "Soft Landing Complete Set",
-    sub: "Whole set of 4 blind boxes",
+    sub: "Whole set of 3 blind boxes",
     price: 19.99,
   },
 };
@@ -23,7 +23,7 @@ const FREE_SHIPPING_MIN = 40;
 const SHIPPING_FLAT = 4.99;
 
 const SOFT_LANDING_DESC =
-  "Our debut series introduces four collectible designs and one lucky variant, " +
+  "Our debut series introduces three collectible designs and one lucky variant, " +
   "each inspired by soft fur details and wing motifs. The wings reflect our vision: " +
   "dreams, creativity, and passion taking flight—while the idea of a " +
   "“soft landing” represents this first release: a gentle beginning to our " +
@@ -324,7 +324,7 @@ function pageCollections() {
         <a class="series-card" href="#/collections/soft-landing">
           <div class="series-cover">
             <span class="series-badge">Debut Series</span>
-            <span class="wing-mark">Soft Landing</span>
+            <img src="img/product-2.png" alt="Soft Landing photo card holder render">
           </div>
           <div class="series-info">
             <h3>Soft Landing</h3>
@@ -381,9 +381,9 @@ function pageProduct() {
               </button>
               <button class="option-card" data-option="soft-landing-set" aria-pressed="false">
                 <span><span class="opt-name">Whole Set</span>
-                <span class="opt-sub">4 blind boxes, one of each design</span></span>
+                <span class="opt-sub">3 blind boxes, one of each design</span></span>
                 <span><span class="opt-price">${money(PRODUCTS["soft-landing-set"].price)}</span>
-                <span class="opt-save">Save ${money(PRODUCTS["soft-landing-single"].price * 4 - PRODUCTS["soft-landing-set"].price)}</span></span>
+                <span class="opt-save">Save ${money(PRODUCTS["soft-landing-single"].price * 3 - PRODUCTS["soft-landing-set"].price)}</span></span>
               </button>
             </div>
           </div>
@@ -910,9 +910,9 @@ const CHAT_TOPICS = [
   { keys: ["help", "confused", "question", "how does"], a: "Happy to help! You can ask me about blind boxes, prices, shipping, the lucky variant, or how ordering works ♡" },
   { keys: ["lucky", "variant", "rare", "secret", "chase"], a: "Ooh, the lucky variant! Soft Landing has three regular designs plus one lucky variant, so four designs in total. Any box could be the lucky one…" },
   { keys: ["blind box", "blindbox", "blind-box", "surprise", "mystery"], a: "A blind box is a sealed little mystery! You won't know which of the four designs is inside until you open it. That's the best part ♡" },
-  { keys: ["set", "all of them", "every design", "duplicates"], a: "The Whole Set is 4 blind boxes, one of each design, for $19.99. No duplicates, and it saves you $3.97 versus singles!" },
+  { keys: ["set", "all of them", "every design", "duplicates"], a: "The Whole Set is 3 blind boxes, one of each design, for $19.99. No duplicates, and it saves you $3.98 versus singles!" },
   { keys: ["ship", "shipping cost", "deliver", "mail", "arrive"], a: "Shipping is a flat $4.99, and free once your order reaches $40!" },
-  { keys: ["price", "cost", "how much", "expensive"], a: "A single blind box is $5.99, and the whole set of 4 is $19.99 ♡" },
+  { keys: ["price", "cost", "how much", "expensive"], a: "A single blind box is $7.99, and the whole set of 3 is $19.99 ♡" },
   { keys: ["flip", "anti", "ring", "facing", "backwards"], a: "Every holder has two attachment rings so your photo card stays front-facing, always. Zero flips, bunny promise!" },
   { keys: ["fit", "size", "photocard", "photo card", "dimension"], a: "Cordi holders fit standard photo cards, the 55 by 85 mm kind you pull from albums ♡" },
   { keys: ["return", "refund", "cancel", "real card", "charge"], a: "Little secret: this is a demo storefront, so payments are simulated. No real charges, promise!" },

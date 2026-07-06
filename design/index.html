@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cordi Lab — Soft Landing 3D Design Review</title>
+<style>
+  :root {
+    --bg: #0e1013;
+    --panel: #16191f;
+    --panel2: #1c2028;
+    --line: #262b35;
+    --ink: #eef0f4;
+    --dim: #8b93a3;
+    --pink: #f191a3;
+    --gold: #f2ce7e;
+    --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+    --sans: "Helvetica Neue", Arial, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--sans); }
+
+  #canvas-wrap { position: fixed; inset: 0; }
+  #canvas-wrap canvas { display: block; }
+  #glow {
+    position: fixed; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(600px 400px at 70% 20%, rgba(241,145,163,0.09), transparent 70%),
+      radial-gradient(700px 500px at 25% 85%, rgba(126,156,242,0.07), transparent 70%);
+  }
+
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px;
+    background: linear-gradient(180deg, rgba(14,16,19,0.9), rgba(14,16,19,0));
+  }
+  .brand { font-weight: 700; letter-spacing: 0.02em; font-size: 15px; }
+  .brand em { color: var(--pink); font-style: italic; }
+  .crumb { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: 0.08em; }
+  .badge {
+    margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+    border: 1px solid var(--line); color: var(--dim); border-radius: 999px; padding: 5px 12px;
+    background: rgba(22,25,31,0.7); backdrop-filter: blur(6px);
+  }
+
+  .panel {
+    position: fixed; z-index: 10;
+    background: rgba(22,25,31,0.82); backdrop-filter: blur(10px);
+    border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px;
+  }
+  .panel h3 {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.18em; color: var(--dim); text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  #variants { left: 16px; top: 70px; width: 246px; }
+  .variant {
+    display: grid; grid-template-columns: 26px 1fr auto; gap: 4px 10px; align-items: center;
+    width: 100%; text-align: left;
+    background: none; border: 1px solid transparent; border-radius: 10px;
+    color: var(--ink); padding: 10px; cursor: pointer; font: inherit;
+  }
+  .variant:hover { background: var(--panel2); }
+  .variant.active { background: var(--panel2); border-color: #333a48; }
+  .variant .num { grid-row: span 2; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .variant.active .num { color: var(--pink); }
+  .variant .name { font-size: 13px; font-weight: 600; }
+  .variant .sub { grid-column: 2; font-size: 11px; color: var(--dim); }
+  .variant .dots { display: flex; gap: 4px; }
+  .variant .dots i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.18); }
+  .lucky-tag {
+    grid-column: 2; margin-top: 3px; justify-self: start;
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em;
+    color: var(--gold); border: 1px solid rgba(242,206,126,0.4); border-radius: 999px; padding: 2px 8px;
+  }
+
+  #inspector { right: 16px; top: 70px; width: 250px; max-height: calc(100vh - 150px); overflow-y: auto; }
+  #inspector::-webkit-scrollbar { width: 0; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .swatch {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.14); cursor: pointer; padding: 0;
+  }
+  .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.2); }
+  .finish { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+  .finish button {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+    background: var(--panel2); color: var(--dim); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 4px; cursor: pointer;
+  }
+  .finish button.active { color: var(--ink); border-color: #444d60; }
+  .spec { font-size: 11.5px; color: var(--dim); display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+  .spec b { color: var(--ink); font-weight: 500; font-family: var(--mono); font-size: 11px; text-align: right; }
+  .note { margin-top: 12px; font-size: 10.5px; line-height: 1.5; color: var(--dim); border-top: 1px solid var(--line); padding-top: 10px; }
+
+  #hud {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10;
+    display: flex; gap: 8px; align-items: center;
+  }
+  #hud button {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+    background: rgba(22,25,31,0.85); color: var(--dim); border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 16px; cursor: pointer; backdrop-filter: blur(8px);
+  }
+  #hud button:hover, #hud button.on { color: var(--ink); border-color: #444d60; }
+  #hint {
+    position: fixed; bottom: 18px; right: 20px; z-index: 10;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; color: #575f6e;
+  }
+  #title-card {
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 9;
+    text-align: center; pointer-events: none;
+  }
+  #title-card .t { font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
+  #title-card .s { font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; color: var(--dim); text-transform: uppercase; margin-top: 3px; }
+
+  @media (max-width: 900px) {
+    #variants { width: 200px; }
+    #inspector { display: none; }
+  }
+</style>
+<script type="importmap">
+  { "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="canvas-wrap"></div>
+<div id="glow"></div>
+
+<div class="topbar">
+  <span class="brand">Cordi <em>Lab</em></span>
+  <span class="crumb">SOFT LANDING SERIES · 3D DESIGN REVIEW · BUILD 01</span>
+  <span class="badge">4 VARIANTS · CONCEPT COLOR</span>
+</div>
+
+<div class="panel" id="variants"><h3>Variants</h3></div>
+
+<div class="panel" id="inspector">
+  <h3>Colorway</h3>
+  <div class="swatches" id="body-swatches"></div>
+  <h3>Wing Finish</h3>
+  <div class="finish" id="wing-finishes"></div>
+  <h3>Specs</h3>
+  <div class="spec">
+    <span>Fits card</span><b>55 × 85 mm</b>
+    <span>Body</span><b>70 × 110 × 5 mm</b>
+    <span>Ring holes</span><b>Ø 10 mm × 2</b>
+    <span>Anti-flip</span><b>dual ring</b>
+    <span>Print (resin)</span><b>0.05 mm</b>
+    <span>Print (FDM)</span><b>0.12 mm</b>
+  </div>
+  <p class="note" id="design-note"></p>
+</div>
+
+<div id="title-card"><div class="t" id="tc-name"></div><div class="s" id="tc-sub"></div></div>
+
+<div id="hud">
+  <button id="btn-rotate" class="on">AUTO-ROTATE</button>
+  <button id="btn-front">FRONT</button>
+  <button id="btn-back">BACK</button>
+  <button id="btn-export">EXPORT PNG</button>
+</div>
+<div id="hint">DRAG ORBIT · SCROLL ZOOM</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from './vendor/OrbitControls.js';
+import { RoomEnvironment } from './vendor/RoomEnvironment.js';
+
+/* ---------- renderer / scene ---------- */
+
+const wrap = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1013);
+scene.fog = new THREE.Fog(0x0e1013, 420, 900);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 1, 2000);
+camera.position.set(110, 95, 175);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 58, 0);
+controls.enableDamping = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 1.1;
+controls.minDistance = 90;
+controls.maxDistance = 420;
+controls.maxPolarAngle = Math.PI * 0.55;
+
+/* lights */
+const key = new THREE.DirectionalLight(0xffffff, 1.4);
+key.position.set(80, 160, 100);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -120; key.shadow.camera.right = 120;
+key.shadow.camera.top = 160; key.shadow.camera.bottom = -60;
+key.shadow.radius = 6;
+scene.add(key);
+const rimPink = new THREE.PointLight(0xf191a3, 900, 600); rimPink.position.set(-140, 90, -80); scene.add(rimPink);
+const rimBlue = new THREE.PointLight(0x7e9cf2, 700, 600); rimBlue.position.set(150, 60, -120); scene.add(rimBlue);
+
+/* stage */
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(260, 72),
+  new THREE.MeshStandardMaterial({ color: 0x14161b, roughness: 0.85, metalness: 0.1 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const disc = new THREE.Mesh(
+  new THREE.CylinderGeometry(78, 82, 4, 72),
+  new THREE.MeshPhysicalMaterial({ color: 0x1b1e25, roughness: 0.35, metalness: 0.5, clearcoat: 0.5 })
+);
+disc.position.y = 2;
+disc.receiveShadow = true;
+scene.add(disc);
+
+const ring = new THREE.Mesh(
+  new THREE.TorusGeometry(80, 0.7, 12, 96),
+  new THREE.MeshBasicMaterial({ color: 0xf191a3 })
+);
+ring.rotation.x = Math.PI / 2;
+ring.position.y = 4.2;
+scene.add(ring);
+
+const grid = new THREE.PolarGridHelper(250, 16, 10, 60, 0x232833, 0x1a1e27);
+grid.position.y = 0.2;
+scene.add(grid);
+
+/* ---------- materials ---------- */
+
+const matBody = new THREE.MeshPhysicalMaterial({ color: 0xffe7ed, roughness: 0.34, clearcoat: 0.65, clearcoatRoughness: 0.25 });
+const matAccent = new THREE.MeshPhysicalMaterial({ color: 0xf2a9bb, roughness: 0.3, clearcoat: 0.5 });
+const matWing = new THREE.MeshPhysicalMaterial({ color: 0xd6dae2, roughness: 0.12, metalness: 1.0 });
+
+const WING_FINISHES = {
+  CHROME: 0xd6dae2, 'ROSE CHROME': 0xe9c3cc, PEARL: 0xf2eff5, GUNMETAL: 0x757b87,
+};
+const BODY_COLORS = {
+  Blush: 0xffe7ed, Cream: 0xfdf4e6, Frost: 0xeaf3fb, Lilac: 0xf0ebfd, Sage: 0xe7f0e2, Midnight: 0x2a2d35,
+};
+
+/* ---------- geometry helpers ---------- */
+
+function roundedRect(w, h, r) {
+  const s = new THREE.Shape();
+  s.moveTo(-w/2 + r, -h/2);
+  s.lineTo(w/2 - r, -h/2); s.quadraticCurveTo(w/2, -h/2, w/2, -h/2 + r);
+  s.lineTo(w/2, h/2 - r); s.quadraticCurveTo(w/2, h/2, w/2 - r, h/2);
+  s.lineTo(-w/2 + r, h/2); s.quadraticCurveTo(-w/2, h/2, -w/2, h/2 - r);
+  s.lineTo(-w/2, -h/2 + r); s.quadraticCurveTo(-w/2, -h/2, -w/2 + r, -h/2);
+  return s;
+}
+
+const W = 70, H = 110, T = 5;
+
+function makePlate() {
+  const shape = roundedRect(W, H, 6);
+  for (const hx of [-11, 11]) {
+    const hole = new THREE.Path();
+    hole.absarc(hx, H/2 - 13, 5, 0, Math.PI * 2, true);
+    shape.holes.push(hole);
+  }
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: T, bevelEnabled: true, bevelSize: 0.8, bevelThickness: 0.8, bevelSegments: 3, curveSegments: 24 });
+  const mesh = new THREE.Mesh(geo, matBody);
+  mesh.castShadow = mesh.receiveShadow = true;
+  return mesh;
+}
+
+function makeFrame() {
+  const g = new THREE.Group();
+  const t = 2.4, tall = 1.6, inset = 5;
+  const iw = W - inset * 2, ih = H - inset * 2 - 16;
+  const mk = (w, h, x, y) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, tall), matBody);
+    m.position.set(x, y, T + tall / 2);
+    m.castShadow = true;
+    g.add(m);
+  };
+  const cy = -8;
+  mk(iw, t, 0, cy + ih / 2);
+  mk(iw, t, 0, cy - ih / 2);
+  mk(t, ih, -iw / 2 + t / 2, cy);
+  mk(t, ih, iw / 2 - t / 2, cy);
+  return g;
+}
+
+function makeScallops() {
+  const g = new THREE.Group();
+  const r = 3.6, step = 6.6;
+  const edge = (x0, y0, x1, y1) => {
+    const dx = x1 - x0, dy = y1 - y0;
+    const len = Math.hypot(dx, dy);
+    const n = Math.floor(len / step);
+    for (let i = 0; i <= n; i++) {
+      const p = i / n;
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), matBody);
+      m.position.set(x0 + dx * p, y0 + dy * p, T + 0.6);
+      m.scale.z = 0.72;
+      m.castShadow = true;
+      g.add(m);
+    }
+  };
+  const ix = W / 2 - 3.4, top = H / 2 - 22, bot = -H / 2 + 3.4;
+  edge(-ix, top, -ix, bot);
+  edge(ix, top, ix, bot);
+  edge(-ix, bot, ix, bot);
+  return g;
+}
+
+/* A feather is a flattened capsule whose ROOT sits at the group origin,
+   so a fan of rotated feathers reads as one attached wing. */
+function rootedFeather(len, r, angleDeg, z) {
+  const geo = new THREE.CapsuleGeometry(r, len, 6, 14);
+  geo.translate(0, len / 2 + r * 0.4, 0);
+  geo.scale(1, 1, 0.55);
+  const m = new THREE.Mesh(geo, matWing);
+  m.castShadow = true;
+  m.rotation.z = THREE.MathUtils.degToRad(-90 + angleDeg);
+  m.position.z = z;
+  return m;
+}
+
+function wingFan(side, layers) {
+  const g = new THREE.Group();
+  for (const { specs, z } of layers) {
+    for (const [len, r, angle] of specs) {
+      g.add(rootedFeather(len, r, angle, z));
+    }
+  }
+  if (side < 0) g.rotation.y = Math.PI;
+  return g;
+}
+
+function makeWingSleek(side) {
+  return wingFan(side, [
+    { z: 0, specs: [[34, 3.3, 40], [30, 2.9, 21], [25, 2.5, 4], [18, 2.1, -11]] },
+  ]);
+}
+
+function makeWingAngel(side) {
+  return wingFan(side, [
+    { z: -0.4, specs: [[36, 3.7, 44], [32, 3.2, 26], [26, 2.7, 8], [19, 2.2, -8]] },
+    { z: 1.4, specs: [[26, 3.0, 56], [21, 2.6, 34]] },
+  ]);
+}
+
+function makeWingBat(side) {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0);
+  s.lineTo(10 * side === 0 ? 10 : 10, 14);
+  const p = (x, y) => [x * 1, y];
+  s.moveTo(0, -2);
+  s.lineTo(8, 16);
+  s.lineTo(20, 22);
+  s.lineTo(34, 24);
+  s.lineTo(46, 22);
+  s.quadraticCurveTo(40, 12, 42, 4);
+  s.quadraticCurveTo(32, 8, 28, 2);
+  s.quadraticCurveTo(20, 6, 16, 0);
+  s.quadraticCurveTo(8, 2, 0, -2);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 1.6, bevelEnabled: true, bevelSize: 0.5, bevelThickness: 0.5, bevelSegments: 2 });
+  const m = new THREE.Mesh(geo, matWing);
+  m.castShadow = true;
+  if (side < 0) m.rotation.y = Math.PI;
+  return m;
+}
+
+function starShape(R, r) {
+  const s = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? R : r;
+    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(a) * rad, y = Math.sin(a) * rad;
+    i === 0 ? s.moveTo(x, y) : s.lineTo(x, y);
+  }
+  s.closePath();
+  return s;
+}
+
+function makeStar(size, mat) {
+  const geo = new THREE.ExtrudeGeometry(starShape(size, size * 0.45), { depth: 1.8, bevelEnabled: true, bevelSize: 0.4, bevelThickness: 0.4, bevelSegments: 2 });
+  const m = new THREE.Mesh(geo, mat || matAccent);
+  m.castShadow = true;
+  return m;
+}
+
+function makeHeart(size, mat) {
+  const s = new THREE.Shape();
+  s.moveTo(0, -size * 0.9);
+  s.bezierCurveTo(size * 1.3, 0, size * 0.75, size, 0, size * 0.35);
+  s.bezierCurveTo(-size * 0.75, size, -size * 1.3, 0, 0, -size * 0.9);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 1.6, bevelEnabled: true, bevelSize: 0.35, bevelThickness: 0.35, bevelSegments: 2 });
+  const m = new THREE.Mesh(geo, mat || matAccent);
+  m.castShadow = true;
+  return m;
+}
+
+function makeSnowflake(size) {
+  const g = new THREE.Group();
+  for (let i = 0; i < 6; i++) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(size, size * 0.14, 1.2), matAccent);
+    arm.rotation.z = (i / 6) * Math.PI;
+    g.add(arm);
+    for (const d of [-1, 1]) {
+      for (const off of [0.28, 0.6]) {
+        const twig = new THREE.Mesh(new THREE.BoxGeometry(size * 0.26, size * 0.1, 1.2), matAccent);
+        const a = (i / 6) * Math.PI;
+        const bx = Math.cos(a) * size * off * 0.5 * (d > 0 ? 1 : -1);
+        const by = Math.sin(a) * size * off * 0.5 * (d > 0 ? 1 : -1);
+        twig.position.set(bx, by, 0);
+        twig.rotation.z = a + d * 0.7;
+        g.add(twig);
+      }
+    }
+  }
+  g.children.forEach(c => { c.castShadow = true; });
+  return g;
+}
+
+function makePaw(size) {
+  const g = new THREE.Group();
+  const pad = new THREE.Mesh(new THREE.SphereGeometry(size, 20, 16), matAccent);
+  pad.scale.set(1, 0.85, 0.5);
+  g.add(pad);
+  for (let i = -1; i <= 1; i++) {
+    const toe = new THREE.Mesh(new THREE.SphereGeometry(size * 0.38, 14, 12), matAccent);
+    toe.scale.z = 0.5;
+    toe.position.set(i * size * 0.72, size * 0.95 - Math.abs(i) * size * 0.18, 0);
+    g.add(toe);
+  }
+  g.children.forEach(c => { c.castShadow = true; });
+  return g;
+}
+
+function textDecal(text, wmm, colorFg, colorBg) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const ctx = c.getContext('2d');
+  if (colorBg) { ctx.fillStyle = colorBg; ctx.beginPath(); ctx.roundRect(6, 26, 500, 204, 60); ctx.fill(); }
+  ctx.fillStyle = colorFg;
+  ctx.font = 'bold 150px Georgia, serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 256, 136);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8;
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(wmm, wmm / 2),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+  );
+  return m;
+}
+
+/* ---------- variants ---------- */
+
+function buildBase() {
+  const g = new THREE.Group();
+  g.add(makePlate());
+  return g;
+}
+
+const DESIGNS = [
+  {
+    id: 'snowfall', name: 'Snowfall', sub: 'Scalloped rim · angel wings · snowflakes',
+    note: 'Wavy scalloped border frames the card like piped icing. Twin snowflakes at the header, layered angel wings. Ships in Frost / Chrome by default.',
+    colors: { body: 0xeaf3fb, accent: 0xbfd9ef, wing: 0xd6dae2 },
+    build() {
+      const g = buildBase();
+      g.add(makeScallops());
+      const sf1 = makeSnowflake(9); sf1.position.set(-23, H/2 - 13, T + 1); g.add(sf1);
+      const sf2 = makeSnowflake(5.5); sf2.position.set(25, H/2 - 8, T + 1); g.add(sf2);
+      const wl = makeWingAngel(-1); wl.position.set(-W/2 + 2, 8, T / 2); g.add(wl);
+      const wr = makeWingAngel(1); wr.position.set(W/2 - 2, 28, T / 2); g.add(wr);
+      return g;
+    },
+  },
+  {
+    id: 'encore', name: 'Encore', sub: 'Frame border · like counter · sleek wings',
+    note: 'For the idol era. A raised frame, a pop star badge, a "?!" reaction, and a ♥999 like counter in the corner. Sleek four-feather wings.',
+    colors: { body: 0xffe7ed, accent: 0xf2a9bb, wing: 0xe9c3cc },
+    build() {
+      const g = buildBase();
+      g.add(makeFrame());
+      const st = makeStar(6.5); st.position.set(-24, H/2 - 11, T + 0.4); st.rotation.z = 0.2; g.add(st);
+      const q = textDecal('?!', 16, '#c4808f'); q.position.set(25, H/2 - 10, T + 1.9); g.add(q);
+      const bubble = new THREE.Mesh(new THREE.BoxGeometry(26, 11, 1.8), matAccent);
+      bubble.position.set(17, -H/2 + 13, T + 0.9); bubble.castShadow = true; g.add(bubble);
+      const heart = makeHeart(3.2, matBody); heart.position.set(8, -H/2 + 13, T + 1.6); g.add(heart);
+      const n999 = textDecal('999', 16, '#fff'); n999.position.set(20.5, -H/2 + 13, T + 2.0); g.add(n999);
+      const wl = makeWingSleek(-1); wl.position.set(-W/2 + 2, 20, T / 2); g.add(wl);
+      const wr = makeWingSleek(1); wr.position.set(W/2 - 2, 32, T / 2); g.add(wr);
+      return g;
+    },
+  },
+  {
+    id: 'starlight', name: 'Starlight', sub: 'Star charms · crown spike · curved wings',
+    note: 'Constellation cut. Raised stars pinned to the frame corners and a crown spike at the crest. Curved wings sweep upward for the flight motif.',
+    colors: { body: 0xf0ebfd, accent: 0xcabcf2, wing: 0xf2eff5 },
+    build() {
+      const g = buildBase();
+      g.add(makeFrame());
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(2.6, 14, 16), matAccent);
+      spike.position.set(0, H/2 + 5, T / 2); spike.castShadow = true; g.add(spike);
+      const s1 = makeStar(7); s1.position.set(-W/2 + 4, 4, T + 0.6); s1.rotation.z = 0.3; g.add(s1);
+      const s2 = makeStar(7); s2.position.set(W/2 - 5, -H/2 + 16, T + 0.6); s2.rotation.z = -0.4; g.add(s2);
+      const s3 = makeStar(4, matBody); s3.position.set(-22, H/2 - 10, T + 0.4); g.add(s3);
+      const s4 = makeStar(4, matBody); s4.position.set(23, H/2 - 10, T + 0.4); g.add(s4);
+      const wl = makeWingAngel(-1); wl.position.set(-W/2 + 2, 12, T / 2); wl.rotation.z = 0.2; g.add(wl);
+      const wr = makeWingAngel(1); wr.position.set(W/2 - 2, 28, T / 2); wr.rotation.z = -0.2; g.add(wr);
+      return g;
+    },
+  },
+  {
+    id: 'midnight-luck', name: 'Midnight Luck', sub: 'Bat wings · paw pads · chase variant',
+    note: 'The lucky variant. Bat wings, beans-up paw pads, gloss midnight body with gold accents. One hides in the series - if you pull it, it found you.',
+    lucky: true,
+    colors: { body: 0x2a2d35, accent: 0xf2ce7e, wing: 0x757b87 },
+    build() {
+      const g = buildBase();
+      g.add(makeFrame());
+      const p1 = makePaw(6); p1.position.set(-14, -H/2 + 26, T + 1.4); p1.rotation.z = 0.25; g.add(p1);
+      const p2 = makePaw(6); p2.position.set(26, 8, T + 1.4); p2.rotation.z = -0.3; g.add(p2);
+      const wl = makeWingBat(-1); wl.position.set(-W/2 + 4, 4, T / 2); g.add(wl);
+      const wr = makeWingBat(1); wr.position.set(W/2 - 4, 30, T / 2); g.add(wr);
+      return g;
+    },
+  },
+];
+
+/* ---------- holder mount / swap ---------- */
+
+const mount = new THREE.Group();
+mount.position.y = 62;
+mount.rotation.x = THREE.MathUtils.degToRad(-8);
+scene.add(mount);
+
+let current = null;
+let activeIdx = 0;
+
+function show(idx) {
+  activeIdx = idx;
+  const d = DESIGNS[idx];
+  if (current) mount.remove(current);
+  matBody.color.setHex(d.colors.body);
+  matAccent.color.setHex(d.colors.accent);
+  matWing.color.setHex(d.colors.wing);
+  current = d.build();
+  current.position.y = 0;
+  mount.add(current);
+  document.getElementById('tc-name').textContent = d.name;
+  document.getElementById('tc-sub').textContent = (d.lucky ? 'LUCKY VARIANT · ' : 'DESIGN 0' + (idx + 1) + ' · ') + 'SOFT LANDING';
+  document.getElementById('design-note').textContent = d.note;
+  document.querySelectorAll('.variant').forEach((b, i) => b.classList.toggle('active', i === idx));
+  document.querySelectorAll('#body-swatches .swatch').forEach(s => s.classList.remove('active'));
+}
+
+/* ---------- UI ---------- */
+
+const variantsEl = document.getElementById('variants');
+DESIGNS.forEach((d, i) => {
+  const b = document.createElement('button');
+  b.className = 'variant';
+  b.innerHTML = `
+    <span class="num">0${i + 1}</span>
+    <span class="name">${d.name}</span>
+    <span class="dots">
+      <i style="background:#${d.colors.body.toString(16).padStart(6, '0')}"></i>
+      <i style="background:#${d.colors.accent.toString(16).padStart(6, '0')}"></i>
+      <i style="background:#${d.colors.wing.toString(16).padStart(6, '0')}"></i>
+    </span>
+    <span class="sub">${d.sub}</span>
+    ${d.lucky ? '<span class="lucky-tag">LUCKY · CHASE</span>' : ''}`;
+  b.addEventListener('click', () => show(i));
+  variantsEl.appendChild(b);
+});
+
+const swEl = document.getElementById('body-swatches');
+for (const [name, hex] of Object.entries(BODY_COLORS)) {
+  const s = document.createElement('button');
+  s.className = 'swatch';
+  s.title = name;
+  s.style.background = '#' + hex.toString(16).padStart(6, '0');
+  s.addEventListener('click', () => {
+    matBody.color.setHex(hex);
+    document.querySelectorAll('#body-swatches .swatch').forEach(x => x.classList.remove('active'));
+    s.classList.add('active');
+  });
+  swEl.appendChild(s);
+}
+
+const wfEl = document.getElementById('wing-finishes');
+Object.entries(WING_FINISHES).forEach(([name, hex], i) => {
+  const b = document.createElement('button');
+  b.textContent = name;
+  if (i === 0) b.classList.add('active');
+  b.addEventListener('click', () => {
+    matWing.color.setHex(hex);
+    wfEl.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  });
+  wfEl.appendChild(b);
+});
+
+const btnRot = document.getElementById('btn-rotate');
+btnRot.addEventListener('click', () => {
+  controls.autoRotate = !controls.autoRotate;
+  btnRot.classList.toggle('on', controls.autoRotate);
+});
+document.getElementById('btn-front').addEventListener('click', () => {
+  camera.position.set(0, 75, 210); controls.target.set(0, 58, 0);
+});
+document.getElementById('btn-back').addEventListener('click', () => {
+  camera.position.set(0, 75, -210); controls.target.set(0, 58, 0);
+});
+document.getElementById('btn-export').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = `cordi-${DESIGNS[activeIdx].id}.png`;
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+show(0);
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  ring.rotation.z += 0.0016;
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

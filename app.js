@@ -10,6 +10,7 @@ const PRODUCTS = {
     name: "Soft Landing Blind Box",
     sub: "Single blind box",
     price: 7.99,
+    stripe: "https://buy.stripe.com/test_28EbJ0gN2bcg0fHaNR2kw00",
   },
   "soft-landing-set": {
     id: "soft-landing-set",
@@ -695,6 +696,19 @@ function pageCheckout() {
 
           <fieldset>
             <legend>Payment</legend>
+            ${(() => {
+              const lines = Object.entries(cart).filter(([id]) => PRODUCTS[id].stripe);
+              if (!lines.length) return "";
+              const testMode = lines.some(([id]) => PRODUCTS[id].stripe.includes("/test_"));
+              return `<div class="stripe-pay">
+                ${lines.map(([id, qty]) => {
+                  const p = PRODUCTS[id];
+                  return `<a class="btn btn-primary btn-block" href="${p.stripe}" target="_blank" rel="noopener">Pay for ${esc(p.name)}${qty > 1 ? " × " + qty : ""} with Stripe</a>`;
+                }).join("")}
+                <p class="stripe-note">Secure checkout by Stripe: card, Apple Pay, Google Pay. Set your quantity on the Stripe page.${testMode ? " <b>Test mode is on, so no real charges yet.</b>" : ""}</p>
+                <div class="or-divider"><span>or try the demo checkout</span></div>
+              </div>`;
+            })()}
             <div class="field" data-field="cardName">
               <label for="f-card-name">Name on card</label>
               <input id="f-card-name" name="cardName" autocomplete="cc-name" placeholder="Cordi Bunny">

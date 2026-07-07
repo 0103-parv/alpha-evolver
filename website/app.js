@@ -393,7 +393,7 @@ function pageCollections() {
         <a class="series-card" href="#/collections/soft-landing">
           <div class="series-cover">
             <span class="series-badge">Debut Series</span>
-            <img src="img/product-2.png" alt="Soft Landing photo card holder render">
+            <img src="img/gallery-1.jpeg" alt="Soft Landing blind box">
           </div>
           <div class="series-info">
             <h3>Soft Landing</h3>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1080px; overflow: hidden; }
+  #stage { position: relative; width: 1080px; height: 1080px; overflow: hidden;
+           background: linear-gradient(180deg, #fbe3dc 0%, #fdf0e6 34%, #fdf6ec 58%); }
+
+  .sun { position: absolute; right: 90px; top: 80px; width: 230px; height: 230px; border-radius: 50%;
+         background: radial-gradient(circle, rgba(255,236,200,0.95) 0%, rgba(255,236,200,0) 70%); }
+
+  .cloud { position: absolute; }
+  .cloud div { position: absolute; background: #fffdf9; border-radius: 50%; opacity: 0.9; }
+
+  .hill { position: absolute; border-radius: 50% 50% 0 0; }
+  .hill.back  { top: 590px; left: -700px; width: 2500px; height: 900px; background: #d8e8c4; }
+  .hill.front { top: 690px; left: -800px; width: 2700px; height: 1000px; background: #c6ddad; }
+
+  .flower { position: absolute; transform-origin: 50% 100%; }
+  .petal { position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #f6b8c4; }
+  .petal.white { background: #fffdf8; }
+  .fcenter { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #f7d67c; left: 7px; top: 7px; }
+  .stem { position: absolute; width: 4px; height: 34px; background: #a9c98e; left: 11px; top: 22px; border-radius: 2px; }
+
+  .grassblade { position: absolute; width: 6px; height: 26px; background: #b3d495; border-radius: 3px 3px 0 0;
+                transform-origin: 50% 100%; }
+
+  #coco { position: absolute; transform-origin: 50% 100%; will-change: transform; }
+  #shadow { position: absolute; width: 260px; height: 44px; border-radius: 50%;
+            background: rgba(150, 120, 100, 0.18); filter: blur(6px); }
+
+  .heart { position: absolute; font-size: 54px; color: #f191a3; opacity: 0;
+           font-family: Georgia, serif; will-change: transform, opacity; }
+
+  #title { position: absolute; left: 0; width: 1080px; top: 210px; text-align: center;
+           font-family: Georgia, 'Times New Roman', serif; font-size: 150px; font-weight: bold;
+           color: #4a3b30; opacity: 0; will-change: transform, opacity; letter-spacing: 0.01em; }
+  #title .lab { color: #e28b94; font-style: italic; }
+  #tagline { position: absolute; left: 0; width: 1080px; top: 400px; text-align: center;
+             font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 30px; letter-spacing: 0.42em;
+             color: #93a98c; opacity: 0; text-transform: uppercase; }
+  #fadein { position: absolute; inset: 0; background: #fdf6ec; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="sun"></div>
+
+  <div class="cloud" id="cloud1" style="top:120px">
+    <div style="width:150px;height:60px;left:0;top:20px"></div>
+    <div style="width:90px;height:70px;left:35px;top:0"></div>
+    <div style="width:100px;height:55px;left:80px;top:18px"></div>
+  </div>
+  <div class="cloud" id="cloud2" style="top:300px">
+    <div style="width:120px;height:48px;left:0;top:16px"></div>
+    <div style="width:70px;height:55px;left:30px;top:0"></div>
+    <div style="width:80px;height:44px;left:62px;top:14px"></div>
+  </div>
+  <div class="cloud" id="cloud3" style="top:60px">
+    <div style="width:100px;height:40px;left:0;top:14px"></div>
+    <div style="width:60px;height:46px;left:24px;top:0"></div>
+  </div>
+
+  <div class="hill back"></div>
+  <div class="hill front"></div>
+
+  <div id="flowers"></div>
+  <div id="grass"></div>
+
+  <div id="shadow"></div>
+  <img id="coco" src="coco-sitting.png?v=9">
+
+  <div class="heart" id="h1">&#10084;</div>
+  <div class="heart" id="h2">&#10084;</div>
+  <div class="heart" id="h3">&#10084;</div>
+
+  <div id="title">Cordi<span class="lab"> Lab</span></div>
+  <div id="tagline">Photocard Accessories</div>
+  <div id="fadein"></div>
+</div>
+
+<script>
+const SPRITES = {};
+for (const n of ['sitting', 'winking', 'excited']) {
+  const img = new Image();
+  img.src = 'coco-' + n + '.png?v=' + 9;
+  SPRITES[n] = img;
+}
+const F = 1.5; // one global scale keeps all poses proportionate
+
+// scatter flowers and grass deterministically
+const flowersEl = document.getElementById('flowers');
+const grassEl = document.getElementById('grass');
+let seed = 7;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const flowerData = [];
+for (let i = 0; i < 14; i++) {
+  const x = 40 + rand() * 1000;
+  const y = 800 + rand() * 230;
+  if (x > 300 && x < 760 && y < 960) continue; // keep Coco's spot clear
+  const f = document.createElement('div');
+  f.className = 'flower';
+  f.style.left = x + 'px';
+  f.style.top = y + 'px';
+  const white = rand() > 0.55;
+  let petals = '<div class="stem"></div>';
+  for (let p = 0; p < 5; p++) {
+    const a = (p / 5) * Math.PI * 2;
+    petals += `<div class="petal${white ? ' white' : ''}" style="left:${7 + Math.cos(a) * 11}px;top:${7 + Math.sin(a) * 11}px"></div>`;
+  }
+  petals += '<div class="fcenter"></div>';
+  f.innerHTML = petals;
+  const scale = 0.8 + rand() * 0.7;
+  flowersEl.appendChild(f);
+  flowerData.push({ el: f, phase: rand() * 6.28, scale });
+}
+for (let i = 0; i < 26; i++) {
+  const g = document.createElement('div');
+  g.className = 'grassblade';
+  g.style.left = (20 + rand() * 1040) + 'px';
+  g.style.top = (790 + rand() * 260) + 'px';
+  g.dataset.phase = rand() * 6.28;
+  grassEl.appendChild(g);
+}
+
+const coco = document.getElementById('coco');
+const shadow = document.getElementById('shadow');
+const title = document.getElementById('title');
+const tagline = document.getElementById('tagline');
+const fadein = document.getElementById('fadein');
+const hearts = [document.getElementById('h1'), document.getElementById('h2'), document.getElementById('h3')];
+
+const GROUND = 960;          // Coco's feet y
+const COCO_W = 400;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = (t) => t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2;
+// elastic overshoot for the title pop
+function elastic(p) {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  return 1 - Math.pow(2, -10 * p) * Math.cos(p * 11);
+}
+
+window.seek = function (t) {
+  // ambient: clouds drift, flowers and grass sway
+  document.getElementById('cloud1').style.left = (60 + t * 9) + 'px';
+  document.getElementById('cloud2').style.left = (620 + t * 6) + 'px';
+  document.getElementById('cloud3').style.left = (380 + t * 12) + 'px';
+  for (const f of flowerData) {
+    f.el.style.transform = `scale(${f.scale}) rotate(${Math.sin(t * 1.6 + f.phase) * 4}deg)`;
+  }
+  for (const g of grassEl.children) {
+    g.style.transform = `rotate(${Math.sin(t * 1.9 + Number(g.dataset.phase)) * 7}deg)`;
+  }
+
+  // intro fade from cream
+  fadein.style.opacity = clamp(1 - t / 0.35, 0, 1);
+
+  // ---- Coco motion ----
+  const HOP_START = 0.4, HOP_END = 2.6, HOPS = 4, HOP_H = 150;
+  const X_FROM = -320, X_TO = 340;
+  let x, y = GROUND, rot = 0, sprite = 'sitting', squash = 1;
+
+  if (t < HOP_START) {
+    x = X_FROM;
+    sprite = 'excited';
+  } else if (t < HOP_END) {
+    const p = (t - HOP_START) / (HOP_END - HOP_START);
+    x = X_FROM + (X_TO - X_FROM) * p;
+    const hop = Math.abs(Math.sin(p * HOPS * Math.PI));
+    y = GROUND - hop * HOP_H * (1 - p * 0.25);
+    rot = 7 * (1 - p);
+    sprite = hop > 0.18 ? 'excited' : 'sitting';
+  } else if (t < 3.1) {
+    // landing settle: little squash bounce
+    x = X_TO;
+    const p = (t - HOP_END) / 0.5;
+    squash = 1 - 0.1 * Math.sin(p * Math.PI);
+    sprite = 'sitting';
+  } else if (t < 6.9) {
+    // wave!
+    x = X_TO;
+    sprite = 'winking';
+    const wt = t - 3.1;
+    rot = Math.sin(wt * 2 * Math.PI * 1.15) * 6;
+    y = GROUND - Math.abs(Math.sin(wt * 2 * Math.PI * 0.58)) * 10;
+  } else {
+    // finale: excited, gentle bob
+    x = X_TO;
+    sprite = 'excited';
+    y = GROUND - Math.abs(Math.sin((t - 6.9) * 2.4)) * 12;
+    if (t < 7.25) squash = 1 + 0.06 * Math.sin((t - 6.9) / 0.35 * Math.PI);
+  }
+
+  if (coco.dataset.sprite !== sprite) {
+    coco.src = SPRITES[sprite].src;
+    coco.dataset.sprite = sprite;
+  }
+  const sw = SPRITES[sprite].naturalWidth * F;
+  const sh = SPRITES[sprite].naturalHeight * F;
+  const air = clamp((GROUND - y) / HOP_H, 0, 1);
+  coco.style.width = sw + 'px';
+  coco.style.left = (x + COCO_W / 2 - sw / 2) + 'px';
+  coco.style.top = (y - sh) + 'px';
+  coco.style.transform = `rotate(${rot}deg) scaleY(${squash}) scaleX(${2 - squash})`;
+  shadow.style.left = (x + COCO_W / 2 - 130) + 'px';
+  shadow.style.top = (GROUND - 26) + 'px';
+  shadow.style.transform = `scale(${1 - air * 0.35})`;
+  shadow.style.opacity = 1 - air * 0.45;
+
+  // hearts during the wave
+  const HEART_T = [3.7, 4.8, 5.9];
+  hearts.forEach((h, i) => {
+    const ht = t - HEART_T[i];
+    if (ht < 0 || ht > 1.4) { h.style.opacity = 0; return; }
+    const p = ht / 1.4;
+    h.style.opacity = p < 0.15 ? p / 0.15 : 1 - ease(clamp((p - 0.45) / 0.55, 0, 1));
+    h.style.left = (x + 320 + Math.sin(p * 5 + i) * 22) + 'px';
+    h.style.top = (GROUND - 330 - p * 190 - i * 12) + 'px';
+    h.style.transform = `scale(${0.6 + p * 0.5}) rotate(${Math.sin(p * 6 + i * 2) * 14}deg)`;
+  });
+
+  // title pop
+  const TITLE_T = 7.0;
+  if (t < TITLE_T) {
+    title.style.opacity = 0;
+  } else {
+    const p = clamp((t - TITLE_T) / 0.8, 0, 1);
+    title.style.opacity = clamp(p * 3, 0, 1);
+    title.style.transform = `scale(${0.3 + 0.7 * elastic(p)})`;
+  }
+  const TAG_T = 7.7;
+  tagline.style.opacity = clamp((t - TAG_T) / 0.5, 0, 1);
+};
+seek(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden;
+           background: linear-gradient(180deg, #fbdfd8 0%, #fdeee2 30%, #fdf6ec 55%); }
+  #world { position: absolute; inset: 0; transform-origin: 50% 82%; will-change: transform; }
+
+  .sun { position: absolute; right: 70px; top: 130px; width: 300px; height: 300px; border-radius: 50%;
+         background: radial-gradient(circle, rgba(255,238,205,0.95) 0%, rgba(255,238,205,0) 70%); }
+
+  .cloud { position: absolute; }
+  .cloud div { position: absolute; background: #fffdf9; border-radius: 50%; opacity: 0.92; }
+
+  .sparkle { position: absolute; color: #f4c9d3; font-size: 30px; font-family: Georgia, serif;
+             will-change: opacity, transform; }
+
+  .hill { position: absolute; border-radius: 50% 50% 0 0; }
+  .hill.back  { top: 1170px; left: -700px; width: 2500px; height: 900px; background: #d8e8c4; }
+  .hill.front { top: 1290px; left: -800px; width: 2700px; height: 1000px; background: #c6ddad; }
+
+  .flower { position: absolute; transform-origin: 50% 100%; }
+  .petal { position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #f6b8c4; }
+  .petal.white { background: #fffdf8; }
+  .fcenter { position: absolute; width: 13px; height: 13px; border-radius: 50%; background: #f7d67c; left: 8px; top: 8px; }
+  .stem { position: absolute; width: 4px; height: 40px; background: #a9c98e; left: 12px; top: 24px; border-radius: 2px; }
+
+  .grassblade { position: absolute; width: 7px; height: 30px; background: #b3d495; border-radius: 3px 3px 0 0;
+                transform-origin: 50% 100%; }
+
+  #coco { position: absolute; transform-origin: 50% 100%; will-change: transform; }
+  #shadow { position: absolute; width: 330px; height: 54px; border-radius: 50%;
+            background: rgba(150, 120, 100, 0.18); filter: blur(8px); }
+
+  .heart { position: absolute; font-size: 64px; color: #f191a3; opacity: 0;
+           font-family: Georgia, serif; will-change: transform, opacity; }
+
+  #title { position: absolute; left: 0; width: 1080px; top: 380px; text-align: center;
+           font-family: Georgia, 'Times New Roman', serif; font-size: 172px; font-weight: bold;
+           color: #4a3b30; opacity: 0; will-change: transform, opacity;
+           text-shadow: 0 6px 30px rgba(226, 139, 148, 0.25); }
+  #title .lab { color: #e28b94; font-style: italic; }
+  #tagline { position: absolute; left: 0; width: 1080px; top: 610px; text-align: center;
+             font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 34px; letter-spacing: 0.44em;
+             color: #93a98c; opacity: 0; text-transform: uppercase; text-indent: 0.44em; }
+  .burst { position: absolute; font-family: Georgia, serif; font-size: 44px; color: #f2ce7e;
+           opacity: 0; will-change: transform, opacity; }
+  .burst.pink { color: #f191a3; }
+  #fadein { position: absolute; inset: 0; background: #fdf6ec; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="world">
+    <div class="sun"></div>
+
+    <div class="cloud" id="cloud1" style="top:210px">
+      <div style="width:180px;height:70px;left:0;top:26px"></div>
+      <div style="width:105px;height:82px;left:42px;top:0"></div>
+      <div style="width:120px;height:64px;left:95px;top:22px"></div>
+    </div>
+    <div class="cloud" id="cloud2" style="top:560px">
+      <div style="width:140px;height:56px;left:0;top:18px"></div>
+      <div style="width:82px;height:64px;left:34px;top:0"></div>
+      <div style="width:94px;height:52px;left:72px;top:16px"></div>
+    </div>
+    <div class="cloud" id="cloud3" style="top:100px">
+      <div style="width:110px;height:44px;left:0;top:16px"></div>
+      <div style="width:66px;height:52px;left:26px;top:0"></div>
+    </div>
+    <div class="cloud" id="cloud4" style="top:820px">
+      <div style="width:120px;height:46px;left:0;top:16px"></div>
+      <div style="width:72px;height:56px;left:30px;top:0"></div>
+      <div style="width:84px;height:44px;left:60px;top:14px"></div>
+    </div>
+
+    <div id="sky-sparkles"></div>
+
+    <div class="hill back"></div>
+    <div class="hill front"></div>
+
+    <div id="flowers"></div>
+    <div id="grass"></div>
+
+    <div id="shadow"></div>
+    <img id="coco" src="coco-parachute.png">
+
+    <div class="heart" id="h1">&#10084;</div>
+    <div class="heart" id="h2">&#10084;</div>
+    <div class="heart" id="h3">&#10084;</div>
+
+    <div id="title">Cordi<span class="lab"> Lab</span></div>
+    <div id="tagline">Photocard Accessories</div>
+    <div id="bursts"></div>
+  </div>
+  <div id="fadein"></div>
+</div>
+
+<script>
+const SPRITES = {};
+for (const n of ['parachute', 'sitting', 'winking', 'excited']) {
+  const img = new Image();
+  img.src = 'coco-' + n + '.png';
+  SPRITES[n] = img;
+}
+const F = 1.9;
+const CX = 540;           // Coco's landing x (center)
+const GROUND = 1665;
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+const ease = (t) => t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2;
+function elastic(p) {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  return 1 - Math.pow(2, -10 * p) * Math.cos(p * 11);
+}
+
+let seed = 11;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+/* sky sparkles */
+const skyEl = document.getElementById('sky-sparkles');
+const sparkData = [];
+for (let i = 0; i < 12; i++) {
+  const s = document.createElement('div');
+  s.className = 'sparkle';
+  s.textContent = '✦';
+  s.style.left = (40 + rand() * 1000) + 'px';
+  s.style.top = (90 + rand() * 900) + 'px';
+  s.style.fontSize = (18 + rand() * 22) + 'px';
+  skyEl.appendChild(s);
+  sparkData.push({ el: s, phase: rand() * 6.28, speed: 0.7 + rand() * 1.2 });
+}
+
+/* flowers + grass */
+const flowersEl = document.getElementById('flowers');
+const grassEl = document.getElementById('grass');
+const flowerData = [];
+for (let i = 0; i < 18; i++) {
+  const x = 30 + rand() * 1020;
+  const y = 1360 + rand() * 480;
+  if (x > 280 && x < 800 && y < 1700) continue;
+  const f = document.createElement('div');
+  f.className = 'flower';
+  f.style.left = x + 'px';
+  f.style.top = y + 'px';
+  const white = rand() > 0.55;
+  let petals = '<div class="stem"></div>';
+  for (let p = 0; p < 5; p++) {
+    const a = (p / 5) * Math.PI * 2;
+    petals += `<div class="petal${white ? ' white' : ''}" style="left:${8 + Math.cos(a) * 12}px;top:${8 + Math.sin(a) * 12}px"></div>`;
+  }
+  petals += '<div class="fcenter"></div>';
+  f.innerHTML = petals;
+  const scale = 0.9 + rand() * 0.8;
+  flowersEl.appendChild(f);
+  flowerData.push({ el: f, phase: rand() * 6.28, scale });
+}
+for (let i = 0; i < 34; i++) {
+  const g = document.createElement('div');
+  g.className = 'grassblade';
+  g.style.left = (20 + rand() * 1040) + 'px';
+  g.style.top = (1330 + rand() * 540) + 'px';
+  g.dataset.phase = rand() * 6.28;
+  grassEl.appendChild(g);
+}
+
+/* title burst sparkles */
+const burstsEl = document.getElementById('bursts');
+const burstData = [];
+for (let i = 0; i < 8; i++) {
+  const b = document.createElement('div');
+  b.className = 'burst' + (i % 2 ? ' pink' : '');
+  b.textContent = '✦';
+  burstsEl.appendChild(b);
+  const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+  burstData.push({ el: b, a });
+}
+
+const world = document.getElementById('world');
+const coco = document.getElementById('coco');
+const shadow = document.getElementById('shadow');
+const title = document.getElementById('title');
+const tagline = document.getElementById('tagline');
+const fadein = document.getElementById('fadein');
+const hearts = [document.getElementById('h1'), document.getElementById('h2'), document.getElementById('h3')];
+
+window.seek = function (t) {
+  /* gentle camera settle-in, then slow push at the end */
+  let zoom = 1.05 - 0.05 * easeOut(clamp(t / 3.4, 0, 1));
+  zoom += 0.03 * ease(clamp((t - 7.0) / 3.0, 0, 1));
+  world.style.transform = `scale(${zoom})`;
+
+  document.getElementById('cloud1').style.left = (70 + t * 10) + 'px';
+  document.getElementById('cloud2').style.left = (660 + t * 7) + 'px';
+  document.getElementById('cloud3').style.left = (390 + t * 13) + 'px';
+  document.getElementById('cloud4').style.left = (120 + t * 8) + 'px';
+  for (const f of flowerData) {
+    f.el.style.transform = `scale(${f.scale}) rotate(${Math.sin(t * 1.6 + f.phase) * 4}deg)`;
+  }
+  for (const g of grassEl.children) {
+    g.style.transform = `rotate(${Math.sin(t * 1.9 + Number(g.dataset.phase)) * 7}deg)`;
+  }
+  for (const s of sparkData) {
+    s.el.style.opacity = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * s.speed * 2 + s.phase));
+  }
+
+  fadein.style.opacity = clamp(1 - t / 0.35, 0, 1);
+
+  /* ---- Coco: parachute descent, landing, wave, finale ---- */
+  const D_START = 0.2, D_END = 3.3;
+  let x = CX, y = GROUND, rot = 0, sprite = 'sitting', squash = 1;
+
+  if (t < D_END) {
+    const p = clamp((t - D_START) / (D_END - D_START), 0, 1);
+    const fall = easeOut(p * 0.92 + 0.08 * p * p);
+    y = -380 + (GROUND + 380) * fall;
+    const swayAmp = 60 * (1 - p * 0.75);
+    x = CX + Math.sin(p * 5.2) * swayAmp;
+    rot = Math.cos(p * 5.2) * 7 * (1 - p * 0.6);
+    sprite = 'parachute';
+  } else if (t < 3.85) {
+    const p = (t - D_END) / 0.55;
+    squash = 1 - 0.12 * Math.sin(p * Math.PI);
+    sprite = 'sitting';
+  } else if (t < 6.9) {
+    sprite = 'winking';
+    const wt = t - 3.85;
+    rot = Math.sin(wt * 2 * Math.PI * 1.15) * 6;
+    y = GROUND - Math.abs(Math.sin(wt * 2 * Math.PI * 0.58)) * 12;
+  } else {
+    sprite = 'excited';
+    y = GROUND - Math.abs(Math.sin((t - 6.9) * 2.4)) * 14;
+    if (t < 7.25) squash = 1 + 0.07 * Math.sin((t - 6.9) / 0.35 * Math.PI);
+  }
+
+  if (coco.dataset.sprite !== sprite) {
+    coco.src = SPRITES[sprite].src;
+    coco.dataset.sprite = sprite;
+  }
+  const sw = SPRITES[sprite].naturalWidth * F;
+  const sh = SPRITES[sprite].naturalHeight * F;
+  coco.style.width = sw + 'px';
+  coco.style.left = (x - sw / 2) + 'px';
+  coco.style.top = (y - sh) + 'px';
+  coco.style.transform = `rotate(${rot}deg) scaleY(${squash}) scaleX(${2 - squash})`;
+
+  const air = clamp((GROUND - y) / 900, 0, 1);
+  shadow.style.left = (x - 165) + 'px';
+  shadow.style.top = (GROUND - 30) + 'px';
+  shadow.style.transform = `scale(${1 - air * 0.75})`;
+  shadow.style.opacity = 0.9 - air * 0.75;
+
+  /* hearts during the wave */
+  const HEART_T = [4.4, 5.4, 6.3];
+  hearts.forEach((h, i) => {
+    const ht = t - HEART_T[i];
+    if (ht < 0 || ht > 1.5) { h.style.opacity = 0; return; }
+    const p = ht / 1.5;
+    h.style.opacity = p < 0.15 ? p / 0.15 : 1 - ease(clamp((p - 0.45) / 0.55, 0, 1));
+    h.style.left = (x + 200 + Math.sin(p * 5 + i) * 26) + 'px';
+    h.style.top = (GROUND - 430 - p * 240 - i * 16) + 'px';
+    h.style.transform = `scale(${0.6 + p * 0.55}) rotate(${Math.sin(p * 6 + i * 2) * 14}deg)`;
+  });
+
+  /* title pop + sparkle burst */
+  const TITLE_T = 7.0;
+  if (t < TITLE_T) {
+    title.style.opacity = 0;
+  } else {
+    const p = clamp((t - TITLE_T) / 0.8, 0, 1);
+    title.style.opacity = clamp(p * 3, 0, 1);
+    title.style.transform = `scale(${0.3 + 0.7 * elastic(p)})`;
+  }
+  burstData.forEach(({ el, a }, i) => {
+    const bp = clamp((t - TITLE_T - 0.05 - i * 0.02) / 0.75, 0, 1);
+    if (bp <= 0 || bp >= 1) { el.style.opacity = 0; return; }
+    const r = 90 + easeOut(bp) * 230;
+    el.style.opacity = 1 - bp;
+    el.style.left = (540 + Math.cos(a) * r - 20) + 'px';
+    el.style.top = (480 + Math.sin(a) * r * 0.62 - 20) + 'px';
+    el.style.transform = `scale(${0.5 + bp * 0.9}) rotate(${bp * 90}deg)`;
+  });
+  tagline.style.opacity = clamp((t - 7.7) / 0.5, 0, 1);
+};
+seek(0);
+</script>
+</body>
+</html>

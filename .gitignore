@@ -7,5 +7,4 @@ memory.json
 *.csv
 wandb/
 .weave_log/
-!website/img/*
-!website/design/box/*
+!website/**

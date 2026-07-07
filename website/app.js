@@ -407,9 +407,11 @@ function pageCollections() {
 }
 
 const GALLERY_IMAGES = [
-  { src: "img/product-2.png", alt: "Soft Landing holder in white with silver wings, star, and like counter" },
-  { src: "img/product-3.png", alt: "Soft Landing holder in white with black wings and snowflakes" },
-  { src: "img/product-4.png", alt: "Soft Landing holder in black fur with bat wings and paw pads" },
+  { src: "img/gallery-1.jpeg", alt: "Soft Landing blind box packaging with all four designs" },
+  { src: "img/gallery-2.jpeg", alt: "Snow Angel design, pre-sale now" },
+  { src: "img/gallery-3.jpeg", alt: "Silver Star design, pre-sale now" },
+  { src: "img/gallery-4.jpeg", alt: "Midnight Flight design, pre-sale now" },
+  { src: "img/gallery-5.png", alt: "Teddy Wing hidden edition, pre-sale now" },
 ];
 const GALLERY_SLIDES = GALLERY_IMAGES.length;
 

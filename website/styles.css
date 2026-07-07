@@ -1072,3 +1072,15 @@ main:focus { outline: none; }
 
 .points-earned { margin-top: 1rem; color: var(--body); }
 .points-earned a { color: var(--pink-deep); }
+
+
+/* ---------- Stripe handoff ---------- */
+
+.stripe-pay { margin-bottom: 1.2rem; display: grid; gap: 0.6rem; }
+.stripe-note { color: var(--body); font-size: 0.82rem; line-height: 1.5; }
+.stripe-note b { color: var(--pink-deep); }
+.or-divider {
+  display: flex; align-items: center; gap: 0.8rem;
+  color: var(--body); font-size: 0.8rem; margin-top: 0.4rem;
+}
+.or-divider::before, .or-divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }

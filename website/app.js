@@ -10,13 +10,14 @@ const PRODUCTS = {
     name: "Soft Landing Blind Box",
     sub: "Single blind box",
     price: 7.99,
-    stripe: "https://buy.stripe.com/test_28EbJ0gN2bcg0fHaNR2kw00",
+    stripe: "https://buy.stripe.com/test_dRm8wPfcU84H01w4w5bsc00",
   },
   "soft-landing-set": {
     id: "soft-landing-set",
     name: "Soft Landing Complete Set",
     sub: "Whole set of 3 blind boxes",
     price: 19.99,
+    stripe: "https://buy.stripe.com/test_14AfZhfcU5WzdSm9Qpbsc01",
   },
 };
 

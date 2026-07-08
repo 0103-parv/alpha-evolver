@@ -45,16 +45,21 @@ etc. on `main`) is an unrelated trading project — ignore it for store work.
 
 - Checkout has TWO paths: a Stripe payment-link button (real) and a demo
   card form below it (simulated, charges nothing).
-- The single blind box has a Stripe link wired in `PRODUCTS` in `app.js`:
-  a TEST-MODE link (`buy.stripe.com/test_...`). Test card 4242 4242 4242 4242.
-- TODO (needs the Stripe dashboard on the owner's laptop):
-  1. Verify the existing link's product name/price is "Soft Landing Blind
-     Box" at $7.99 — if wrong, create a corrected payment link.
-  2. Create the Whole Set link ($19.99) and add it as `stripe:` on
-     `soft-landing-set` in `PRODUCTS`.
-  3. For real money: switch Stripe out of test mode (finish account
-     activation: identity + bank), create LIVE payment links (no `test_`
-     in URL), swap them into `PRODUCTS`.
+- BOTH products have TEST-MODE Stripe links wired in `PRODUCTS` in
+  `app.js` (`buy.stripe.com/test_...`). Test card 4242 4242 4242 4242.
+  Both allow the customer to adjust quantity on the Stripe page.
+- These live in the Stripe "CordiLabs sandbox"
+  (acct_1TqbYLEAqLOYzAks, login: Parv's Stripe account), products
+  "Soft Landing Blind Box" $7.99 and "Soft Landing Complete Set" $19.99.
+  NOTE: an older link (in `git log` for app.js) pointed at a different,
+  orphaned sandbox and wrongly bundled BOTH products ($27.98) — don't
+  reuse it.
+- TODO for real money (owner only — needs identity + bank):
+  1. In the Stripe dashboard, "Switch to live account" → verify the
+     business (identity + bank). Until then the account can't even exit
+     sandbox mode.
+  2. Recreate the two products + payment links in LIVE mode (no `test_`
+     in URL) and swap the two `stripe:` URLs in `PRODUCTS`.
 - Stripe links are public URLs — safe to commit.
 
 ## Deploying

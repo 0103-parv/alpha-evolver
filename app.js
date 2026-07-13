@@ -171,7 +171,7 @@ function renderCartUI() {
         ? "You qualify for free shipping!"
         : `Add ${money(FREE_SHIPPING_MIN - subtotal)} more for free shipping.`
     }</p>
-    <a class="btn btn-primary btn-block" href="#/checkout" data-close-cart>Check Out</a>`;
+    <a class="btn btn-primary btn-block" href="#/checkout" data-close-cart>Pre-order</a>`;
 }
 
 $("#cart-button").addEventListener("click", openCart);
@@ -467,7 +467,7 @@ function pageProduct() {
               <span id="qty-value">1</span>
               <button id="qty-plus" aria-label="Increase quantity">+</button>
             </div>
-            <button class="btn btn-pink" id="add-to-cart">Add to Cart · <span id="atc-price">${money(PRODUCTS["soft-landing-single"].price)}</span></button>
+            <button class="btn btn-pink" id="add-to-cart">Pre-order · <span id="atc-price">${money(PRODUCTS["soft-landing-single"].price)}</span></button>
           </div>
 
           <div class="product-desc">
@@ -649,110 +649,48 @@ function pageCheckout() {
   }
 
   const subtotal = cartSubtotal();
-  const ship = shippingFor(subtotal);
-  const total = subtotal + ship;
 
   const lines = Object.entries(cart).map(([id, qty]) => {
     const p = PRODUCTS[id];
     return `<div class="summary-line"><span class="muted">${esc(p.name)} × ${qty}</span><span>${money(p.price * qty)}</span></div>`;
   }).join("");
 
+  const payable = Object.entries(cart).filter(([id]) => PRODUCTS[id].stripe);
+
   return `
   <div class="page checkout-page">
     <div class="container">
-      <h1 class="display">Checkout</h1>
+      <h1 class="display">Pre-order</h1>
       <p class="checkout-sub">You're almost there. Cordi is cheering you on!</p>
       <div class="checkout-layout">
-        <form class="checkout-form" id="checkout-form" novalidate>
+        <div class="checkout-form">
           <fieldset>
-            <legend>Contact &amp; Shipping</legend>
-            <div class="field" data-field="name">
-              <label for="f-name">Full name</label>
-              <input id="f-name" name="name" autocomplete="name" placeholder="Cordi Bunny">
-              <p class="error">Please enter your name.</p>
-            </div>
-            <div class="field" data-field="email">
-              <label for="f-email">Email</label>
-              <input id="f-email" name="email" type="email" autocomplete="email" placeholder="you@example.com">
-              <p class="error">Please enter a valid email address.</p>
-            </div>
-            <div class="field" data-field="address">
-              <label for="f-address">Street address</label>
-              <input id="f-address" name="address" autocomplete="street-address" placeholder="123 Cloud Lane">
-              <p class="error">Please enter your street address.</p>
-            </div>
-            <div class="field-row">
-              <div class="field" data-field="city">
-                <label for="f-city">City</label>
-                <input id="f-city" name="city" autocomplete="address-level2" placeholder="Seattle">
-                <p class="error">Please enter your city.</p>
-              </div>
-              <div class="field" data-field="zip">
-                <label for="f-zip">ZIP / Postal code</label>
-                <input id="f-zip" name="zip" autocomplete="postal-code" placeholder="98101">
-                <p class="error">Please enter a valid postal code.</p>
-              </div>
-            </div>
+            <legend>How pre-orders work</legend>
+            <ol class="preorder-steps">
+              <li>Tap your pre-order button to open our secure Stripe checkout.</li>
+              <li>Enter your shipping address and pay by card, Apple Pay, or Google Pay.</li>
+              <li>Each blind box is made to order and ships in about 2 to 3 weeks.</li>
+            </ol>
           </fieldset>
 
           <fieldset>
-            <legend>Payment</legend>
-            ${(() => {
-              const lines = Object.entries(cart).filter(([id]) => PRODUCTS[id].stripe);
-              if (!lines.length) return "";
-              const testMode = lines.some(([id]) => PRODUCTS[id].stripe.includes("/test_"));
-              return `<div class="stripe-pay">
-                ${lines.map(([id, qty]) => {
-                  const p = PRODUCTS[id];
-                  return `<a class="btn btn-primary btn-block" href="${p.stripe}" target="_blank" rel="noopener">Pay for ${esc(p.name)}${qty > 1 ? " × " + qty : ""} with Stripe</a>`;
-                }).join("")}
-                <p class="stripe-note">Secure checkout by Stripe: card, Apple Pay, Google Pay. Set your quantity on the Stripe page.${testMode ? " <b>Test mode is on, so no real charges yet.</b>" : ""}</p>
-                <div class="or-divider"><span>or try the demo checkout</span></div>
-              </div>`;
-            })()}
-            <div class="field" data-field="cardName">
-              <label for="f-card-name">Name on card</label>
-              <input id="f-card-name" name="cardName" autocomplete="cc-name" placeholder="Cordi Bunny">
-              <p class="error">Please enter the name on your card.</p>
-            </div>
-            <div class="field" data-field="cardNumber">
-              <label for="f-card-number">Card number</label>
-              <div class="card-input-wrap">
-                <input id="f-card-number" name="cardNumber" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456" maxlength="19">
-                <span class="card-brand" id="card-brand"></span>
-              </div>
-              <p class="error">Please enter a valid card number.</p>
-            </div>
-            <div class="field-row">
-              <div class="field" data-field="expiry">
-                <label for="f-expiry">Expiry (MM/YY)</label>
-                <input id="f-expiry" name="expiry" inputmode="numeric" autocomplete="cc-exp" placeholder="08/28" maxlength="5">
-                <p class="error">Please enter a valid future expiry date.</p>
-              </div>
-              <div class="field" data-field="cvc">
-                <label for="f-cvc">Security code</label>
-                <input id="f-cvc" name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4">
-                <p class="error">Please enter the 3 or 4 digit code.</p>
-              </div>
-            </div>
-            ${(() => {
-              const u = currentUser();
-              if (!u) return '<p class="points-nudge">Psst: <a href="#/account">create an account</a> to earn Coco Points on this order.</p>';
-              const maxD = Math.min(Math.floor(u.points / POINTS_PER_DISCOUNT), Math.floor(subtotal));
-              if (maxD < 1) return `<p class="points-nudge">You'll earn Coco Points on this order ♡</p>`;
-              return `<label class="points-redeem"><input type="checkbox" id="use-points" data-discount="${maxD}"> Use ${maxD * POINTS_PER_DISCOUNT} of my ${u.points} Coco Points (−${money(maxD)})</label>`;
-            })()}
-            <p class="secure-note">${ICONS.lock} Your details are encrypted and secure. This demo store does not charge real cards.</p>
-            <button type="submit" class="btn btn-primary btn-block" id="pay-button">Pay ${money(total)}</button>
+            <legend>Pre-order</legend>
+            ${payable.length ? `<div class="stripe-pay">
+              ${payable.map(([id, qty]) => {
+                const p = PRODUCTS[id];
+                return `<a class="btn btn-primary btn-block" href="${p.stripe}" target="_blank" rel="noopener">Pre-order ${esc(p.name)}${qty > 1 ? " × " + qty : ""} · ${money(p.price * qty)}</a>`;
+              }).join("")}
+              <p class="stripe-note">${ICONS.lock} Secure checkout by Stripe. Adjust quantity, enter your shipping address, and pay on the next step. Your card details never touch our site.</p>
+              ${currentUser() ? "" : '<p class="points-nudge">Psst: <a href="#/account">create an account</a> to start collecting Coco Points.</p>'}
+            </div>` : '<p class="stripe-note">Checkout is being set up. Please check back soon!</p>'}
           </fieldset>
-        </form>
+        </div>
 
         <aside class="order-summary">
           <h2>Order Summary</h2>
           ${lines}
-          <div class="summary-line"><span class="muted">Shipping</span><span>${ship === 0 ? "Free" : money(ship)}</span></div>
-          <div class="summary-line" id="sum-discount" hidden><span class="muted">Coco Points</span><span id="sum-discount-val"></span></div>
-          <div class="summary-total"><span>Total</span><span id="sum-total">${money(total)}</span></div>
+          <div class="summary-line"><span class="muted">Shipping</span><span>Added at checkout</span></div>
+          <div class="summary-total"><span>Subtotal</span><span>${money(subtotal)}</span></div>
         </aside>
       </div>
     </div>
@@ -1136,9 +1074,9 @@ const CHAT_TOPICS = [
   { keys: ["price", "cost", "how much", "expensive"], a: "A single blind box is $7.99, and the whole set of 3 is $19.99 ♡" },
   { keys: ["flip", "anti", "ring", "facing", "backwards"], a: "Every holder has two attachment rings so your photo card stays front-facing, always. Zero flips, bunny promise!" },
   { keys: ["fit", "size", "photocard", "photo card", "dimension"], a: "Cordi holders fit standard photo cards, the 55 by 85 mm kind you pull from albums ♡" },
-  { keys: ["return", "refund", "cancel", "real card", "charge"], a: "Little secret: this is a demo storefront, so payments are simulated. No real charges, promise!" },
-  { keys: ["order", "track", "status", "receipt"], a: "Demo orders don't really ship (yet!), so your order number is just a keepsake for now ♡" },
-  { keys: ["buy", "checkout", "cart", "pay", "purchase"], a: "Open Collections, pick Soft Landing, choose a single box or the whole set, then tap the cart up top to check out. I'll cheer the whole way!" },
+  { keys: ["return", "refund", "cancel", "real card", "charge"], a: "Payments run securely through Stripe (card, Apple Pay, or Google Pay). Need help with an order or a return? Reach out any time and we'll take care of you ♡" },
+  { keys: ["order", "track", "status", "receipt", "ship", "shipping", "arrive", "when"], a: "Every box is a pre-order, made just for you and shipped in about 2 to 3 weeks. Stripe emails your receipt the moment you pay ♡" },
+  { keys: ["buy", "checkout", "cart", "pay", "purchase", "preorder", "pre-order"], a: "Open Collections, pick Soft Landing, choose a single box or the whole set, then tap the cart up top to pre-order. I'll cheer the whole way!" },
   { keys: ["story", "about", "cordi", "brand", "who made"], a: "Cordi Lab was born from a collector's frustration with flipped photo cards. The whole story is on the Our Story page ♡" },
   { keys: ["photo", "picture", "image", "prototype"], a: "Product photos are coming soon! We're waiting on the box and prototype, and I can't wait to show you." },
   { keys: ["coco", "cute", "bunny", "name"], a: "Hehe, that's me! I'm Coco, the Cordi Lab bunny ♡" },

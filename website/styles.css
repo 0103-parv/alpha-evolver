@@ -1079,6 +1079,9 @@ main:focus { outline: none; }
 .stripe-pay { margin-bottom: 1.2rem; display: grid; gap: 0.6rem; }
 .stripe-note { color: var(--body); font-size: 0.82rem; line-height: 1.5; }
 .stripe-note b { color: var(--pink-deep); }
+.preorder-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.6rem; color: var(--body); font-size: 0.9rem; line-height: 1.5; }
+.preorder-steps li { padding-left: 0.3rem; }
+.preorder-steps li::marker { color: var(--pink-deep); font-weight: 700; }
 .or-divider {
   display: flex; align-items: center; gap: 0.8rem;
   color: var(--body); font-size: 0.8rem; margin-top: 0.4rem;

@@ -669,7 +669,7 @@ function pageCheckout() {
             <ol class="preorder-steps">
               <li>Tap your pre-order button to open our secure Stripe checkout.</li>
               <li>Enter your shipping address and pay by card, Apple Pay, or Google Pay.</li>
-              <li>Each blind box is made to order and ships in about 2 to 3 weeks.</li>
+              <li>Reserve yours now. We'll email you as soon as it ships.</li>
             </ol>
           </fieldset>
 
@@ -1076,7 +1076,7 @@ const CHAT_TOPICS = [
   { keys: ["flip", "anti", "ring", "facing", "backwards"], a: "Every holder has two attachment rings so your photo card stays front-facing, always. Zero flips, bunny promise!" },
   { keys: ["fit", "size", "photocard", "photo card", "dimension"], a: "Cordi holders fit standard photo cards, the 55 by 85 mm kind you pull from albums ♡" },
   { keys: ["return", "refund", "cancel", "real card", "charge"], a: "Payments run securely through Stripe (card, Apple Pay, or Google Pay). Need help with an order or a return? Reach out any time and we'll take care of you ♡" },
-  { keys: ["order", "track", "status", "receipt", "ship", "shipping", "arrive", "when"], a: "Every box is a pre-order, made just for you and shipped in about 2 to 3 weeks. Stripe emails your receipt the moment you pay ♡" },
+  { keys: ["order", "track", "status", "receipt", "arrive", "when"], a: "Every box is a pre-order for our upcoming release. Stripe emails your receipt the moment you pay, and we'll let you know as soon as it ships ♡" },
   { keys: ["buy", "checkout", "cart", "pay", "purchase", "preorder", "pre-order"], a: "Open Collections, pick Soft Landing, choose a single box or the whole set, then tap the cart up top to pre-order. I'll cheer the whole way!" },
   { keys: ["story", "about", "cordi", "brand", "who made"], a: "Cordi Lab was born from a collector's frustration with flipped photo cards. The whole story is on the Our Story page ♡" },
   { keys: ["photo", "picture", "image", "prototype"], a: "Product photos are coming soon! We're waiting on the box and prototype, and I can't wait to show you." },

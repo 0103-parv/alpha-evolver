@@ -10,14 +10,14 @@ const PRODUCTS = {
     name: "Soft Landing Blind Box",
     sub: "Single blind box",
     price: 7.99,
-    stripe: "https://buy.stripe.com/3cIbIUf7p0rS5sV8jc4Rq01",
+    stripe: "https://buy.stripe.com/eVq28k5wP6Qg2gJ6b44Rq02",
   },
   "soft-landing-set": {
     id: "soft-landing-set",
     name: "Soft Landing Complete Set",
     sub: "Whole set of 3 blind boxes",
     price: 19.99,
-    stripe: "https://buy.stripe.com/6oU4gs3oH7Uk1cFczs4Rq00",
+    stripe: "https://buy.stripe.com/28E8wIaR9gqQ9Jb7f84Rq03",
   },
 };
 
@@ -689,8 +689,9 @@ function pageCheckout() {
         <aside class="order-summary">
           <h2>Order Summary</h2>
           ${lines}
-          <div class="summary-line"><span class="muted">Shipping</span><span>Added at checkout</span></div>
-          <div class="summary-total"><span>Subtotal</span><span>${money(subtotal)}</span></div>
+          <div class="summary-line"><span class="muted">Shipping</span><span>${money(SHIPPING_FLAT)}</span></div>
+          <div class="summary-total"><span>Total</span><span>${money(subtotal + SHIPPING_FLAT)}</span></div>
+          <p class="stripe-note" style="margin-top:0.6rem">Shipping is a flat ${money(SHIPPING_FLAT)} and is added on the Stripe checkout page.</p>
         </aside>
       </div>
     </div>

@@ -323,7 +323,7 @@ function pageHome() {
             <p>Three collectible designs plus one lucky variant, inspired by soft fur details and wing motifs. Which one will land with you?</p>
             <a class="btn btn-primary" href="#/collections/soft-landing">View the Series</a>
           </div>
-          <div class="feature-visual"><div class="mystery-box">?</div></div>
+          <div class="feature-visual"><img class="feature-img" src="img/gallery-1.jpeg" alt="Soft Landing debut blind box, showing all four collectible photocard sleeve designs" loading="lazy"></div>
         </div>
       </div>
     </section>

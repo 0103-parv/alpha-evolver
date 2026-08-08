@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1080px; overflow: hidden; }
+  #stage { position: relative; width: 1080px; height: 1080px; overflow: hidden;
+           background: radial-gradient(circle at 50% 60%, #fdeef0 0%, #fdf4ec 46%, #fdf6ec 100%); }
+
+  .drifting { position: absolute; font-family: Georgia, serif; color: #f3b7c3; will-change: transform, opacity; }
+
+  #ring { position: absolute; left: 190px; top: 350px; width: 700px; height: 700px; border-radius: 50%;
+          border: 5px dashed #f0a9b6; background: rgba(255, 253, 249, 0.55);
+          box-shadow: 0 24px 70px rgba(226, 139, 148, 0.16), inset 0 0 60px rgba(246, 184, 196, 0.18);
+          will-change: transform, opacity; }
+
+  .lbl { position: absolute; font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 800;
+         letter-spacing: 0.06em; text-align: center; will-change: transform, opacity;
+         transform-origin: 50% 50%; }
+  .lbl.yes { color: #e2798c; }
+  .lbl.no  { color: #a9bfa0; }
+
+  #pointer { position: absolute; left: 527px; top: 380px; width: 26px; height: 320px;
+             transform-origin: 13px 320px; will-change: transform, opacity; z-index: 3; }
+  #pointer .shaft { position: absolute; left: 4px; top: 44px; width: 18px; height: 262px;
+                    background: linear-gradient(180deg, #e2798c, #f0a9b6); border-radius: 10px;
+                    box-shadow: 0 4px 10px rgba(180, 90, 105, 0.35); }
+  #pointer .tip { position: absolute; left: -14px; top: 0; width: 0; height: 0;
+                  border-left: 27px solid transparent; border-right: 27px solid transparent;
+                  border-bottom: 50px solid #e2798c; filter: drop-shadow(0 3px 5px rgba(180,90,105,0.3)); }
+  #pointer .paw { position: absolute; left: -8px; top: 32px; width: 42px; height: 42px; border-radius: 50%;
+                  background: #fff6f0; border: 5px solid #e2798c; }
+  #pointer .paw::after { content: '♡'; position: absolute; left: 0; right: 0; top: 3px; text-align: center;
+                         font-family: Georgia, serif; font-size: 23px; color: #e2798c; }
+
+  #coco { position: absolute; transform-origin: 50% 100%; will-change: transform, opacity; z-index: 4; }
+  #cocoShadow { position: absolute; width: 220px; height: 36px; border-radius: 50%; z-index: 1;
+                background: rgba(150, 120, 100, 0.16); filter: blur(6px); will-change: opacity; }
+
+  .qline { position: absolute; left: 0; width: 1080px; text-align: center; z-index: 5;
+           font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 700; color: #4a3b30;
+           font-size: 42px; opacity: 0; will-change: transform, opacity; }
+  .qline b { color: #e2798c; }
+  #q4 { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-weight: bold;
+        font-size: 72px; color: #e2798c; }
+  #knew { position: absolute; left: 0; width: 1080px; top: 244px; text-align: center; z-index: 5;
+          font-family: Georgia, serif; font-style: italic; font-size: 52px; color: #b08f7d; opacity: 0;
+          will-change: transform, opacity; }
+
+  .burst { position: absolute; width: 16px; height: 16px; border-radius: 50%; opacity: 0; z-index: 6;
+           will-change: transform, opacity; }
+
+  #brand { position: absolute; left: 0; width: 1080px; top: 440px; text-align: center; z-index: 7;
+           font-family: Georgia, 'Times New Roman', serif; font-weight: bold; font-size: 110px;
+           color: #4a3b30; opacity: 0; will-change: transform, opacity; }
+  #brand .lab { color: #e28b94; font-style: italic; }
+  #sub { position: absolute; left: 0; width: 1080px; top: 585px; text-align: center; z-index: 7;
+         font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 27px; letter-spacing: 0.4em;
+         color: #93a98c; text-transform: uppercase; opacity: 0; }
+  #fadein { position: absolute; inset: 0; background: #fdf6ec; pointer-events: none; z-index: 9; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="drift"></div>
+  <div id="ring"></div>
+  <div id="labels"></div>
+
+  <div id="cocoShadow"></div>
+  <div id="pointer"><div class="shaft"></div><div class="tip"></div><div class="paw"></div></div>
+  <img id="coco" src="coco-excited.png?v=1">
+
+  <div class="qline" id="q1" style="top:56px">if we told u we&rsquo;re making</div>
+  <div class="qline" id="q2" style="top:114px">a completely <b>ANTI-FLIP</b></div>
+  <div class="qline" id="q3" style="top:172px"><b>COLLECTIBLE</b> photocard&hellip;</div>
+  <div class="qline" id="q4" style="top:240px">would u buy?</div>
+  <div id="knew">( we knew it &hearts; )</div>
+
+  <div id="bursts"></div>
+
+  <div id="brand">Cordi<span class="lab"> Lab</span></div>
+  <div id="sub">Soft Landing &middot; Dropping Soon</div>
+  <div id="fadein"></div>
+</div>
+
+<script>
+const SPRITES = {};
+for (const n of ['excited', 'winking']) {
+  const img = new Image();
+  img.src = 'coco-' + n + '.png?v=1';
+  SPRITES[n] = img;
+}
+
+const CX = 540, CY = 700;      // wheel center: pointer pivot, ring center
+const LABEL_R = 300;           // label distance from center
+const N_LBL = 8;               // YES NO x4, index 0 at top; even = YES
+const END_T = 8.3;             // end-card takeover
+
+// build labels
+const labelsEl = document.getElementById('labels');
+const labelData = [];
+for (let i = 0; i < N_LBL; i++) {
+  const yes = i % 2 === 0;
+  const el = document.createElement('div');
+  el.className = 'lbl ' + (yes ? 'yes' : 'no');
+  el.textContent = yes ? 'YES' : 'NO';
+  const a = (i / N_LBL) * Math.PI * 2;              // 0 = up, clockwise
+  const x = CX + Math.sin(a) * LABEL_R;
+  const y = CY - Math.cos(a) * LABEL_R;
+  el.style.left = (x - 90) + 'px';
+  el.style.top = (y - 32) + 'px';
+  el.style.width = '180px';
+  el.style.fontSize = '54px';
+  labelsEl.appendChild(el);
+  labelData.push({ el, deg: i * (360 / N_LBL), yes });
+}
+
+// ambient drifting hearts
+const driftEl = document.getElementById('drift');
+let seed = 11;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const driftData = [];
+for (let i = 0; i < 10; i++) {
+  const d = document.createElement('div');
+  d.className = 'drifting';
+  d.textContent = rand() > 0.5 ? '❤' : '✦';
+  d.style.fontSize = (18 + rand() * 26) + 'px';
+  driftEl.appendChild(d);
+  driftData.push({ el: d, x: 30 + rand() * 1020, y: rand() * 1080, sp: 14 + rand() * 26, ph: rand() * 6.28 });
+}
+
+// confetti burst pool (from the winning YES at the top of the ring)
+const burstsEl = document.getElementById('bursts');
+const burstData = [];
+const BURST_COLORS = ['#e2798c', '#f6b8c4', '#f7d67c', '#a9c98e', '#fffdf9'];
+for (let i = 0; i < 26; i++) {
+  const b = document.createElement('div');
+  b.className = 'burst';
+  b.style.background = BURST_COLORS[i % BURST_COLORS.length];
+  burstsEl.appendChild(b);
+  burstData.push({ el: b, ang: rand() * 6.28, v: 130 + rand() * 260, ph: rand() });
+}
+
+const coco = document.getElementById('coco');
+const cocoShadow = document.getElementById('cocoShadow');
+const ring = document.getElementById('ring');
+const pointer = document.getElementById('pointer');
+const fadein = document.getElementById('fadein');
+const knew = document.getElementById('knew');
+const brand = document.getElementById('brand');
+const sub = document.getElementById('sub');
+const qs = ['q1','q2','q3','q4'].map(id => document.getElementById(id));
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const easeIO = (t) => t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2;
+function elastic(p) {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  return 1 - Math.pow(2, -10 * p) * Math.cos(p * 11);
+}
+const wrap180 = (d) => { d = ((d % 360) + 360) % 360; return d > 180 ? d - 360 : d; };
+
+// spin: starts SPIN_T0, ends SPIN_T1 landing on the TOP yes (0deg) after 4 turns
+const SPIN_T0 = 1.9, SPIN_T1 = 7.2, TURNS = 4;
+function pointerDeg(t) {
+  if (t < SPIN_T0) {
+    return Math.sin(t * 2.2) * 9;   // idle wiggle
+  }
+  if (t < SPIN_T1) {
+    const p = (t - SPIN_T0) / (SPIN_T1 - SPIN_T0);
+    return easeIO(p) * TURNS * 360;
+  }
+  const p = clamp((t - SPIN_T1) / 0.9, 0, 1);   // elastic settle
+  return TURNS * 360 + Math.sin(p * Math.PI * 3) * 10 * (1 - p);
+}
+
+window.seek = function (t) {
+  fadein.style.opacity = clamp(1 - t / 0.35, 0, 1);
+
+  // end-card takeover: wheel scene dims and shrinks slightly
+  const ep = clamp((t - END_T) / 0.6, 0, 1);
+  const dim = 1 - 0.87 * easeIO(ep);
+
+  for (const d of driftData) {
+    const y = ((d.y - t * d.sp) % 1180 + 1180) % 1180 - 50;
+    d.el.style.transform = `translate(${d.x + Math.sin(t * 0.7 + d.ph) * 18}px, ${y}px) rotate(${Math.sin(t + d.ph) * 20}deg)`;
+    d.el.style.opacity = 0.5;
+  }
+
+  // ring pop-in
+  const rp = clamp((t - 0.15) / 0.7, 0, 1);
+  ring.style.opacity = clamp(rp * 2, 0, 1) * dim;
+  ring.style.transform = `scale(${(0.55 + 0.45 * elastic(rp)) * (1 - 0.06 * ep)}) rotate(${t * 1.5}deg)`;
+
+  const deg = pointerDeg(t);
+  const landed = t >= SPIN_T1;
+  const spinning = t >= SPIN_T0 && t < SPIN_T1;
+
+  // labels: staggered pop-in, pulse as pointer sweeps, resolve at landing
+  labelData.forEach((L, i) => {
+    const ap = clamp((t - 0.35 - i * 0.07) / 0.4, 0, 1);
+    let scale = 0.3 + 0.7 * elastic(ap);
+    let op = clamp(ap * 2, 0, 1);
+    const near = Math.abs(wrap180(deg - L.deg));
+    if (t > SPIN_T0 && near < 26) scale *= 1 + 0.38 * Math.cos((near / 26) * Math.PI / 2);
+    if (landed) {
+      const lp = clamp((t - SPIN_T1) / 0.6, 0, 1);
+      if (L.yes) {
+        scale *= 1 + 0.22 * Math.sin(Math.min(1, lp) * Math.PI) + (L.deg === 0 ? 0.5 * elastic(lp) : 0);
+      } else {
+        op *= 1 - 0.72 * lp;
+        L.el.style.filter = `grayscale(${lp})`;
+      }
+    }
+    L.el.style.opacity = op * dim;
+    L.el.style.transform = `scale(${scale})`;
+  });
+
+  pointer.style.transform = `rotate(${deg}deg)`;
+  pointer.style.opacity = dim;
+
+  // question lines: pop in, fade after landing
+  const QT = [0.55, 0.85, 1.15, 1.5];
+  qs.forEach((q, i) => {
+    const p = clamp((t - QT[i]) / 0.45, 0, 1);
+    let op = clamp(p * 2.2, 0, 1);
+    if (landed) op *= 1 - clamp((t - SPIN_T1 - 0.3) / 0.4, 0, 1);
+    q.style.opacity = op;
+    q.style.transform = `translateY(${(1 - elastic(p)) * 26}px) scale(${0.86 + 0.14 * elastic(p)})`;
+  });
+
+  // "( we knew it )" pops where the question was, then yields to the end card
+  const kp = clamp((t - SPIN_T1 - 0.55) / 0.45, 0, 1);
+  knew.style.opacity = landed ? clamp(kp * 2, 0, 1) * (1 - clamp((t - END_T) / 0.4, 0, 1)) : 0;
+  knew.style.transform = `scale(${0.7 + 0.3 * elastic(kp)})`;
+
+  // Coco: excited + bouncing while spinning, winking after landing
+  const sprite = landed ? 'winking' : 'excited';
+  if (coco.dataset.sprite !== sprite) {
+    coco.src = SPRITES[sprite].src;
+    coco.dataset.sprite = sprite;
+  }
+  const CH = 280;
+  const sw = (SPRITES[sprite].naturalWidth || 260) * (CH / (SPRITES[sprite].naturalHeight || 310));
+  const FEET = 888;
+  let bounce = 0, rot = 0, squash = 1;
+  if (spinning) {
+    const spd = Math.sin(((t - SPIN_T0) / (SPIN_T1 - SPIN_T0)) * Math.PI);
+    bounce = Math.abs(Math.sin(t * 7)) * 15 * spd;
+    rot = Math.sin(t * 7) * 4 * spd;
+  } else if (landed) {
+    const lp = clamp((t - SPIN_T1) / 0.5, 0, 1);
+    squash = 1 + 0.1 * Math.sin(lp * Math.PI);
+    bounce = Math.abs(Math.sin((t - SPIN_T1) * 3.2)) * 8;
+    rot = Math.sin((t - SPIN_T1) * 2.4) * 3;
+  } else {
+    bounce = Math.abs(Math.sin(t * 2.4)) * 5;
+  }
+  coco.style.width = sw + 'px';
+  coco.style.left = (CX - sw / 2) + 'px';
+  coco.style.top = (FEET - CH - bounce) + 'px';
+  coco.style.transform = `rotate(${rot}deg) scaleY(${squash}) scaleX(${2 - squash})`;
+  coco.style.opacity = dim;
+  cocoShadow.style.left = (CX - 110) + 'px';
+  cocoShadow.style.top = (FEET - 16) + 'px';
+  cocoShadow.style.opacity = (0.9 - bounce * 0.02) * dim;
+
+  // confetti burst from the winning YES (top of ring)
+  const BX = CX, BY = CY - LABEL_R;
+  for (const b of burstData) {
+    const bt = t - SPIN_T1 - b.ph * 0.12;
+    if (!landed || bt < 0 || bt > 1.3) { b.el.style.opacity = 0; continue; }
+    const p = bt / 1.3;
+    b.el.style.opacity = (p < 0.1 ? p / 0.1 : 1 - easeIO(p));
+    const dist = b.v * Math.pow(p, 0.7);
+    b.el.style.transform =
+      `translate(${BX + Math.cos(b.ang) * dist}px, ${BY + Math.sin(b.ang) * dist * 0.85 + 190 * p * p}px) scale(${1 - p * 0.4})`;
+  }
+
+  // end card: brand pops center stage
+  const bp = clamp((t - END_T - 0.1) / 0.7, 0, 1);
+  brand.style.opacity = clamp(bp * 2.5, 0, 1);
+  brand.style.transform = `scale(${0.4 + 0.6 * elastic(bp)})`;
+  sub.style.opacity = clamp((t - END_T - 0.55) / 0.5, 0, 1);
+};
+
+const q = new URLSearchParams(location.search);
+seek(Number(q.get('t') || 0));
+</script>
+</body>
+</html>

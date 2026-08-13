@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1080px; overflow: hidden; }
+  #stage { position: relative; width: 1080px; height: 1080px; overflow: hidden;
+           background: linear-gradient(180deg, #fbe3dc 0%, #fdf0e6 34%, #fdf6ec 58%); }
+
+  .sun { position: absolute; right: 90px; top: 80px; width: 230px; height: 230px; border-radius: 50%;
+         background: radial-gradient(circle, rgba(255,236,200,0.95) 0%, rgba(255,236,200,0) 70%); }
+  .cloud { position: absolute; }
+  .cloud div { position: absolute; background: #fffdf9; border-radius: 50%; opacity: 0.9; }
+  .hill { position: absolute; border-radius: 50% 50% 0 0; }
+  .hill.back  { top: 590px; left: -700px; width: 2500px; height: 900px; background: #d8e8c4; }
+  .hill.front { top: 690px; left: -800px; width: 2700px; height: 1000px; background: #c6ddad; }
+
+  .kid { position: absolute; width: 220px; height: 340px; transform-origin: 50% 100%;
+         will-change: transform, opacity; }
+  .kid .leg { position: absolute; bottom: 0; width: 26px; height: 74px; border-radius: 13px;
+              transform-origin: 50% 8%; }
+  .kid .arm { position: absolute; width: 22px; height: 64px; border-radius: 11px;
+              transform-origin: 50% 12%; }
+  .kid .dress { position: absolute; left: 55px; bottom: 62px; width: 110px; height: 120px;
+                border-radius: 34px 34px 46px 46px; }
+  .kid .head { position: absolute; left: 40px; top: 0; width: 140px; height: 132px;
+               border-radius: 50%; background: #ffe8d6; }
+  .kid .hair { position: absolute; left: 40px; top: -8px; width: 140px; height: 74px;
+               border-radius: 70px 70px 30px 30px; }
+  .kid .tail { position: absolute; top: 36px; width: 52px; height: 52px; border-radius: 50%; }
+  .kid .eye { position: absolute; top: 62px; width: 13px; height: 15px; border-radius: 50%;
+              background: #4a3b30; }
+  .kid .cheek { position: absolute; top: 84px; width: 20px; height: 11px; border-radius: 50%;
+                background: #f6b8c4; opacity: 0.8; }
+  .kid .mouth { position: absolute; left: 98px; width: 24px; height: 14px; }
+  .kid .mouth.happy { top: 88px; border-bottom: 5px solid #4a3b30; border-radius: 0 0 24px 24px; }
+  .kid .mouth.sad { top: 96px; border-top: 5px solid #4a3b30; border-radius: 24px 24px 0 0; }
+  .kid .bow { position: absolute; font-size: 34px; }
+
+  #strap { position: absolute; width: 8px; background: #b08f7d; border-radius: 4px;
+           transform-origin: 50% 0; will-change: transform; z-index: 8; }
+  #cardWrap { position: absolute; width: 96px; height: 128px; will-change: transform; z-index: 8; }
+  #cardFront, #cardBack { position: absolute; inset: 0; border-radius: 12px; backface-visibility: hidden; }
+  #cardFront { background: linear-gradient(180deg, #fde7ee, #fbd3e0); border: 4px solid #fffdf9;
+               box-shadow: 0 6px 14px rgba(180, 120, 130, 0.3); }
+  #cardFront .idolface { position: absolute; left: 24px; top: 22px; width: 48px; height: 48px;
+                         border-radius: 50%; background: #ffe8d6; }
+  #cardFront .idolhair { position: absolute; left: 24px; top: 14px; width: 48px; height: 26px;
+                         border-radius: 24px 24px 10px 10px; background: #6d4c35; }
+  #cardFront .ie { position: absolute; top: 46px; width: 6px; height: 7px; border-radius: 50%;
+                   background: #4a3b30; }
+  #cardFront .im { position: absolute; left: 42px; top: 56px; width: 12px; height: 7px;
+                   border-bottom: 3px solid #4a3b30; border-radius: 0 0 12px 12px; }
+  #cardFront .heartrow { position: absolute; left: 0; width: 100%; top: 86px; text-align: center;
+                         font-size: 18px; color: #e2798c; font-family: Georgia, serif; }
+  #cardBack { background: #d9d2c9; border: 4px solid #cfc6ba; transform: scaleX(-1); }
+  #cardBack .stripe { position: absolute; left: 12px; width: 64px; height: 8px; border-radius: 4px;
+                      background: #c3bab0; }
+
+  #sleeve { position: absolute; width: 128px; height: 160px; will-change: transform, opacity; z-index: 9; }
+  #sleeve .body { position: absolute; left: 10px; top: 10px; width: 108px; height: 140px;
+                  border-radius: 18px; background: rgba(249, 219, 231, 0.22); border: 9px solid #f0a9b6;
+                  box-shadow: 0 8px 18px rgba(226, 139, 148, 0.35); }
+  #sleeve .win { position: absolute; top: 26px; width: 44px; height: 58px; background: #fffdf9;
+                 box-shadow: 0 4px 8px rgba(180, 120, 130, 0.25); }
+  #sleeve .win.l { left: -30px; border-radius: 40px 8px 40px 8px; transform: rotate(14deg); }
+  #sleeve .win.r { right: -30px; border-radius: 8px 40px 8px 40px; transform: rotate(-14deg); }
+  #sleeve .hp { position: absolute; left: 0; width: 100%; bottom: -4px; text-align: center;
+                font-family: Georgia, serif; font-size: 26px; color: #e2798c; }
+
+  #coco { position: absolute; will-change: transform, opacity; z-index: 7; }
+  #cocoShadow { position: absolute; width: 200px; height: 34px; border-radius: 50%;
+                background: rgba(150, 120, 100, 0.18); filter: blur(6px); will-change: transform, opacity; }
+
+  .bub { position: absolute; width: 78px; height: 78px; border-radius: 50% 50% 50% 12px;
+         background: #fffdf9; border: 4px solid #e8ddd0; text-align: center; line-height: 74px;
+         font-family: Georgia, serif; font-size: 44px; font-weight: bold; color: #b08f7d;
+         opacity: 0; will-change: transform, opacity; z-index: 8; }
+
+  .gust { position: absolute; height: 7px; border-radius: 4px; background: rgba(160, 190, 220, 0.55);
+          opacity: 0; will-change: transform, opacity; }
+
+  .spark { position: absolute; font-family: Georgia, serif; color: #f7d67c; opacity: 0;
+           will-change: transform, opacity; z-index: 8; }
+  .heart { position: absolute; font-family: Georgia, serif; color: #f191a3; opacity: 0;
+           will-change: transform, opacity; z-index: 8; }
+
+  .caption { position: absolute; left: 0; width: 1080px; top: 968px; text-align: center;
+             font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 52px;
+             color: #4a3b30; opacity: 0; will-change: transform, opacity; z-index: 10; }
+  .caption b { color: #e2798c; font-style: italic; }
+
+  #dimmer { position: absolute; inset: 0; background: #fdf6ec; opacity: 0; z-index: 11; }
+  .endline { position: absolute; left: 0; width: 1080px; text-align: center; opacity: 0;
+             will-change: transform, opacity; z-index: 12; }
+  #end1 { top: 360px; font-family: Georgia, serif; font-weight: bold; font-size: 92px; color: #4a3b30; }
+  #end1 i { color: #e2798c; }
+  #end2 { top: 496px; font-family: Georgia, serif; font-style: italic; font-size: 54px; color: #b08f7d; }
+  #brand { top: 600px; font-family: Georgia, serif; font-weight: bold; font-size: 84px; color: #4a3b30; }
+  #brand .lab { color: #e28b94; font-style: italic; }
+  #sub { top: 706px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 25px;
+         letter-spacing: 0.4em; color: #93a98c; text-transform: uppercase; }
+  #endcoco { position: absolute; will-change: transform, opacity; z-index: 12; }
+  #fadein { position: absolute; inset: 0; background: #fdf6ec; pointer-events: none; z-index: 20; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="sun"></div>
+  <div class="cloud" id="cloud1" style="top:120px">
+    <div style="width:150px;height:60px;left:0;top:20px"></div>
+    <div style="width:90px;height:70px;left:35px;top:0"></div>
+    <div style="width:100px;height:55px;left:80px;top:18px"></div>
+  </div>
+  <div class="cloud" id="cloud2" style="top:280px">
+    <div style="width:120px;height:48px;left:0;top:16px"></div>
+    <div style="width:70px;height:55px;left:30px;top:0"></div>
+    <div style="width:80px;height:44px;left:62px;top:14px"></div>
+  </div>
+  <div class="hill back"></div>
+  <div class="hill front"></div>
+
+  <div class="kid" id="girl">
+    <div class="leg" style="left:78px;  background:#ffe8d6"></div>
+    <div class="leg" style="left:116px; background:#ffe8d6"></div>
+    <div class="dress" style="background:#f6b86a"></div>
+    <div class="arm" style="left:44px;  top:140px; background:#ffe8d6"></div>
+    <div class="arm" style="left:154px; top:140px; background:#ffe8d6"></div>
+    <div class="head"></div>
+    <div class="hair" style="background:#6d4c35"></div>
+    <div class="tail" style="left:16px;  background:#6d4c35"></div>
+    <div class="tail" style="right:16px; background:#6d4c35"></div>
+    <div class="eye" style="left:78px"></div>
+    <div class="eye" style="left:128px"></div>
+    <div class="cheek" style="left:62px"></div>
+    <div class="cheek" style="left:138px"></div>
+    <div class="mouth happy" id="girlHappy"></div>
+    <div class="mouth sad" id="girlSad" style="display:none"></div>
+    <div class="bow" style="left:150px; top:-16px; color:#e2798c">&#127872;</div>
+  </div>
+
+  <div class="kid" id="friend">
+    <div class="leg" style="left:78px;  background:#f4d9c0"></div>
+    <div class="leg" style="left:116px; background:#f4d9c0"></div>
+    <div class="dress" style="background:#9fc2e0"></div>
+    <div class="arm" style="left:44px;  top:140px; background:#f4d9c0"></div>
+    <div class="arm" style="left:154px; top:140px; background:#f4d9c0"></div>
+    <div class="head" style="background:#f4d9c0"></div>
+    <div class="hair" style="background:#2e2620; height:56px"></div>
+    <div class="eye" style="left:78px"></div>
+    <div class="eye" style="left:128px"></div>
+    <div class="cheek" style="left:62px"></div>
+    <div class="cheek" style="left:138px"></div>
+    <div class="mouth happy" id="friendMouth"></div>
+  </div>
+
+  <div id="strap"></div>
+  <div id="cardWrap">
+    <div id="cardFront">
+      <div class="idolhair"></div>
+      <div class="idolface"></div>
+      <div class="ie" style="left:36px"></div>
+      <div class="ie" style="left:54px"></div>
+      <div class="im"></div>
+      <div class="heartrow">&#10084; &#10084; &#10084;</div>
+    </div>
+    <div id="cardBack">
+      <div class="stripe" style="top:24px"></div>
+      <div class="stripe" style="top:44px; width:48px"></div>
+      <div class="stripe" style="top:88px; width:56px"></div>
+    </div>
+  </div>
+
+  <div id="sleeve">
+    <div class="win l"></div>
+    <div class="win r"></div>
+    <div class="body"></div>
+    <div class="hp">&#10084;</div>
+  </div>
+
+  <div id="cocoShadow"></div>
+  <img id="coco" src="coco-parachute.png?v=1">
+
+  <div class="bub" id="bub">?</div>
+
+  <div class="gust" id="g1" style="top:470px"></div>
+  <div class="gust" id="g2" style="top:520px"></div>
+  <div class="gust" id="g3" style="top:575px"></div>
+
+  <div class="spark" id="s1">&#10022;</div>
+  <div class="spark" id="s2">&#10022;</div>
+  <div class="spark" id="s3">&#10022;</div>
+  <div class="heart" id="h1">&#10084;</div>
+  <div class="heart" id="h2">&#10084;</div>
+
+  <div class="caption" id="cap1">new photocard day!!</div>
+  <div class="caption" id="cap2">&hellip;but it keeps <b>flipping</b></div>
+  <div class="caption" id="cap3">coco to the rescue &hearts;</div>
+  <div class="caption" id="cap4"><b>anti-flip.</b> always facing u.</div>
+
+  <div id="dimmer"></div>
+  <div class="endline" id="end1">never flips. <i>ever.</i></div>
+  <div class="endline" id="end2">your card, always facing you</div>
+  <div class="endline" id="brand">Cordi<span class="lab"> Lab</span></div>
+  <div class="endline" id="sub">Soft Landing &middot; Dropping Soon</div>
+  <img id="endcoco" src="coco-winking.png?v=1">
+  <div id="fadein"></div>
+</div>
+
+<script>
+const SPRITES = {};
+for (const n of ['parachute', 'excited', 'sitting', 'winking']) {
+  const img = new Image();
+  img.src = 'coco-' + n + '.png?v=1';
+  SPRITES[n] = img;
+}
+
+const $ = (id) => document.getElementById(id);
+const girl = $('girl'), friend = $('friend');
+const strap = $('strap'), cardWrap = $('cardWrap'), cardFront = $('cardFront'), cardBack = $('cardBack');
+const sleeve = $('sleeve'), coco = $('coco'), cocoShadow = $('cocoShadow'), bub = $('bub');
+const caps = ['cap1','cap2','cap3','cap4'].map($);
+const dimmer = $('dimmer');
+const gusts = ['g1','g2','g3'].map($);
+const sparks = ['s1','s2','s3'].map($);
+const hearts = ['h1','h2'].map($);
+
+const GROUND = 900;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const easeIO = (t) => t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2;
+function elastic(p) {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  return 1 - Math.pow(2, -10 * p) * Math.cos(p * 11);
+}
+
+// card flip choreography: 1 = front, -1 = back
+const FLIPS = [
+  { t: 3.0, to: -1 }, { t: 3.7, to: 1 }, { t: 4.3, to: -1 },
+  { t: 5.0, to: 1 },  { t: 5.5, to: -1 }, { t: 9.55, to: 1 },
+];
+const FLIP_DUR = 0.45;
+function cardSide(t) {
+  let from = 1, prog = 1;
+  for (const f of FLIPS) {
+    if (t >= f.t) {
+      prog = clamp((t - f.t) / FLIP_DUR, 0, 1);
+      from = -f.to * (prog < 1 ? 1 : -1);
+      if (prog >= 1) { from = f.to; prog = 1; }
+      else { from = -f.to; }
+    }
+  }
+  let target = from, angle;
+  const last = FLIPS.filter(f => t >= f.t).pop();
+  if (!last) return { sx: 1, front: true };
+  const p = clamp((t - last.t) / FLIP_DUR, 0, 1);
+  const start = -last.to;
+  angle = (start === 1 ? 0 : Math.PI) + easeIO(p) * Math.PI * (last.to === 1 ? -1 : 1) * (start === 1 ? -1 : -1);
+  const c = Math.cos(angle);
+  return { sx: c, front: c >= 0 };
+}
+
+function poseKid(el, x, bob, legSwing, armUp, tilt) {
+  el.style.left = (x - 110) + 'px';
+  el.style.top = (GROUND - 340 - bob) + 'px';
+  el.style.transform = `rotate(${tilt}deg)`;
+  const legs = el.querySelectorAll('.leg');
+  legs[0].style.transform = `rotate(${legSwing}deg)`;
+  legs[1].style.transform = `rotate(${-legSwing}deg)`;
+  const arms = el.querySelectorAll('.arm');
+  arms[0].style.transform = `rotate(${18 + legSwing * 0.5}deg)`;
+  arms[1].style.transform = `rotate(${-18 - legSwing * 0.5 - armUp}deg)`;
+}
+
+window.seek = function (t) {
+  $('fadein').style.opacity = clamp(1 - t / 0.35, 0, 1);
+  $('cloud1').style.left = (80 + t * 7) + 'px';
+  $('cloud2').style.left = (640 + t * 5) + 'px';
+
+  // ---------- girl ----------
+  const RUN_END = 2.1;
+  let gx, gbob = 0, gleg = 0, gtilt = 0;
+  const running = t < RUN_END;
+  if (running) {
+    const p = easeIO(clamp(t / RUN_END, 0, 1));
+    gx = -180 + (360 - -180) * p;
+    gleg = Math.sin(t * 14) * 26;
+    gbob = Math.abs(Math.sin(t * 14)) * 22;
+    gtilt = 4;
+  } else {
+    gx = 360;
+    gbob = Math.abs(Math.sin(t * 2.6)) * 6;
+  }
+  const sad = t > 5.4 && t < 8.9;
+  const celebrating = t >= 10.1 && t < 12.2;
+  if (celebrating) gbob = Math.abs(Math.sin(t * 6)) * 34;
+  $('girlHappy').style.display = sad ? 'none' : 'block';
+  $('girlSad').style.display = sad ? 'block' : 'none';
+  gtilt = sad ? -3 : gtilt;
+  poseKid(girl, gx, gbob, gleg, celebrating ? 90 : (t > 2.3 && t < 3.0 ? 55 : 0), gtilt);
+
+  // ---------- friend ----------
+  let fbob = Math.abs(Math.sin(t * 2.2 + 1)) * 5;
+  if (celebrating) fbob = Math.abs(Math.sin(t * 6 + 0.6)) * 34;
+  const flean = (t > 2.4 && t < 5.6) ? Math.sin(clamp((t - 2.4) / 0.5, 0, 1) * Math.PI / 2) * -6 : 0;
+  poseKid(friend, 760, fbob, 0, celebrating ? 90 : 0, flean);
+  $('friendMouth').className = (t > 3.2 && t < 9.6) ? 'mouth sad' : 'mouth happy';
+
+  // ---------- card on backpack strap ----------
+  const cardX = gx + 118, cardTopY = GROUND - 340 - gbob + 168;
+  strap.style.left = (cardX + 44) + 'px';
+  strap.style.top = (cardTopY - 34) + 'px';
+  strap.style.height = '40px';
+  const side = cardSide(t);
+  const swing = running ? Math.sin(t * 14) * 10 : Math.sin(t * 2.1) * 4;
+  // gust wobble (12.d): card shakes but STAYS front
+  let wob = 0;
+  if (t > 10.35 && t < 11.3) wob = Math.sin((t - 10.35) * 26) * 10 * (1 - (t - 10.35) / 0.95);
+  cardWrap.style.left = cardX + 'px';
+  cardWrap.style.top = cardTopY + 'px';
+  cardWrap.style.transform = `rotate(${swing + wob}deg) scaleX(${side.sx})`;
+  cardFront.style.visibility = side.front ? 'visible' : 'hidden';
+  cardBack.style.visibility = side.front ? 'hidden' : 'visible';
+
+  // "?" bubble from friend during flips
+  const bubOn = (t > 3.15 && t < 5.9);
+  bub.style.opacity = bubOn ? clamp((t - 3.15) / 0.3, 0, 1) : 0;
+  const bp = clamp((t - 3.15) / 0.3, 0, 1);
+  bub.style.left = '680px';
+  bub.style.top = (GROUND - 470 - fbob) + 'px';
+  bub.style.transform = `scale(${0.5 + 0.5 * elastic(bp)})`;
+  bub.textContent = t > 4.6 ? '??' : '?';
+
+  // ---------- Coco: parachute in, land, present sleeve ----------
+  const DROP_T0 = 5.9, LAND_T = 7.6;
+  let cocoY, cocoX = 618, sprite = 'parachute', cocoH = 300, cocoOp = 1, sway = 0;
+  if (t < DROP_T0) {
+    cocoOp = 0; cocoY = -400;
+  } else if (t < LAND_T) {
+    const p = clamp((t - DROP_T0) / (LAND_T - DROP_T0), 0, 1);
+    cocoY = -320 + (GROUND - 300 - -320) * easeIO(p);
+    sway = Math.sin(t * 3.2) * 8;
+  } else {
+    sprite = t > 12.0 ? 'sitting' : (t > 8.3 ? 'excited' : 'sitting');
+    cocoH = 230;
+    cocoY = GROUND - 230;
+    const lp = clamp((t - LAND_T) / 0.45, 0, 1);
+    if (lp < 1) cocoY += Math.sin(lp * Math.PI) * 14;
+  }
+  if (coco.dataset.sprite !== sprite) { coco.src = SPRITES[sprite].src; coco.dataset.sprite = sprite; }
+  const cw = (SPRITES[sprite].naturalWidth || 260) * (cocoH / (SPRITES[sprite].naturalHeight || 310));
+  coco.style.width = cw + 'px';
+  coco.style.left = (cocoX - cw / 2) + 'px';
+  coco.style.top = cocoY + 'px';
+  coco.style.opacity = cocoOp;
+  coco.style.transform = `rotate(${sway}deg)`;
+  const airborne = t >= DROP_T0 && t < LAND_T;
+  cocoShadow.style.left = (cocoX - 100) + 'px';
+  cocoShadow.style.top = (GROUND - 14) + 'px';
+  cocoShadow.style.opacity = t < DROP_T0 ? 0 : (airborne ? 0.35 : 0.85);
+  cocoShadow.style.transform = `scale(${airborne ? 0.6 : 1})`;
+
+  // ---------- sleeve: pops from Coco, flies to card, wraps it ----------
+  const S_POP = 8.55, S_FLY0 = 9.1, S_FLY1 = 9.8;
+  let sOp = 0, sx = cocoX - 64, sy = GROUND - 420, sScale = 0.2;
+  if (t >= S_POP && t < S_FLY0) {
+    const p = clamp((t - S_POP) / 0.4, 0, 1);
+    sOp = 1; sScale = 0.2 + 0.8 * elastic(p);
+    sy = GROUND - 380 - 40 * p;
+  } else if (t >= S_FLY0) {
+    sOp = 1; sScale = 1;
+    const p = easeIO(clamp((t - S_FLY0) / (S_FLY1 - S_FLY0), 0, 1));
+    const tx = cardX - 16, ty = cardTopY - 16;
+    sx = (cocoX - 64) + (tx - (cocoX - 64)) * p;
+    sy = (GROUND - 420) + (ty - (GROUND - 420)) * p - Math.sin(p * Math.PI) * 120;
+  }
+  if (t >= S_FLY1) { sx = cardX - 16; sy = cardTopY - 16; }
+  sleeve.style.opacity = sOp;
+  sleeve.style.left = sx + 'px';
+  sleeve.style.top = sy + 'px';
+  sleeve.style.transform = `scale(${sScale}) rotate(${swing + wob}deg)`;
+
+  // sparkles at sleeve pop + lock moment
+  sparks.forEach((s, i) => {
+    const st = t - (S_FLY1 + 0.05) - i * 0.1;
+    if (st < 0 || st > 0.9) { s.style.opacity = 0; return; }
+    const p = st / 0.9;
+    s.style.opacity = 1 - p;
+    s.style.fontSize = '44px';
+    s.style.left = (cardX - 30 + i * 52) + 'px';
+    s.style.top = (cardTopY - 40 - p * 70 - i * 14) + 'px';
+    s.style.transform = `rotate(${p * 180}deg) scale(${0.6 + p})`;
+  });
+  hearts.forEach((h, i) => {
+    const ht = t - 10.2 - i * 0.35;
+    if (ht < 0 || ht > 1.3) { h.style.opacity = 0; return; }
+    const p = ht / 1.3;
+    h.style.opacity = p < 0.15 ? p / 0.15 : 1 - p;
+    h.style.fontSize = '48px';
+    h.style.left = (gx + 160 + i * 240) + 'px';
+    h.style.top = (GROUND - 480 - p * 150) + 'px';
+    h.style.transform = `scale(${0.6 + p * 0.6}) rotate(${Math.sin(p * 6 + i) * 16}deg)`;
+  });
+
+  // gust lines during the anti-flip proof
+  gusts.forEach((g, i) => {
+    const gt = t - 10.35 - i * 0.1;
+    if (gt < 0 || gt > 0.8) { g.style.opacity = 0; return; }
+    const p = gt / 0.8;
+    g.style.opacity = (p < 0.2 ? p / 0.2 : 1 - p) * 0.9;
+    g.style.width = (110 + i * 40) + 'px';
+    g.style.left = (-140 + p * 900) + 'px';
+    g.style.top = (430 + i * 60) + 'px';
+  });
+
+  // ---------- captions ----------
+  const CAPS = [[0.8, 2.9], [3.4, 5.8], [6.2, 8.4], [10.15, 11.9]];
+  caps.forEach((c, i) => {
+    const [a, b] = CAPS[i];
+    const p = clamp((t - a) / 0.4, 0, 1);
+    let op = clamp(p * 2, 0, 1);
+    if (t > b) op *= clamp(1 - (t - b) / 0.35, 0, 1);
+    c.style.opacity = op;
+    c.style.transform = `translateY(${(1 - elastic(p)) * 30}px)`;
+  });
+
+  // ---------- ending ----------
+  const E = 12.1;
+  dimmer.style.opacity = clamp((t - E) / 0.5, 0, 1) * 0.88;
+  const lines = [['end1', E + 0.25], ['end2', E + 0.6], ['brand', E + 0.95], ['sub', E + 1.3]];
+  for (const [id, at] of lines) {
+    const el = $(id);
+    const p = clamp((t - at) / 0.5, 0, 1);
+    el.style.opacity = clamp(p * 2, 0, 1);
+    el.style.transform = `scale(${0.6 + 0.4 * elastic(p)})`;
+  }
+  const ecp = clamp((t - E - 1.15) / 0.5, 0, 1);
+  const ec = $('endcoco');
+  const ech = 190;
+  const ecw = (SPRITES.winking.naturalWidth || 260) * (ech / (SPRITES.winking.naturalHeight || 310));
+  ec.style.width = ecw + 'px';
+  ec.style.left = (540 - ecw / 2) + 'px';
+  ec.style.top = '760px';
+  ec.style.opacity = ecp;
+  ec.style.transform = `scale(${0.5 + 0.5 * elastic(ecp)}) rotate(${Math.sin(t * 2) * 3}deg)`;
+};
+
+const q = new URLSearchParams(location.search);
+seek(Number(q.get('t') || 0));
+</script>
+</body>
+</html>

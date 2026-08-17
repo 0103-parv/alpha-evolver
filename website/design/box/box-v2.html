@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Soft Landing box — V2 Sticker White</title>
+<style>
+  :root {
+    --paper: #ffffff; --blush: #fff0f4; --pink: #f06292; --pink-deep: #d94f7e;
+    --pink-line: #f8bbd0; --ink: #3d3d3d; --mint: #bfe3cf; --butter: #ffe9a8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f6f6f6; font-family: 'Arial Rounded MT Bold', 'Trebuchet MS', sans-serif;
+         width: 1960px; padding: 40px 30px 30px; }
+  .panel { background: var(--paper); border-radius: 18px; position: relative; overflow: hidden;
+           border: 4px solid var(--ink); box-shadow: 10px 10px 0 rgba(240, 98, 146, 0.25); }
+  .plabel { text-align: center; color: #8a8a8a; font-size: 24px; margin-top: 14px;
+            font-family: 'Trebuchet MS', sans-serif; }
+  .sticker { display: inline-block; background: var(--blush); border: 3px solid var(--ink);
+             border-radius: 999px; padding: 10px 28px; font-weight: bold; color: var(--pink-deep); }
+  .wing { position: absolute; width: 120px; height: 74px; }
+  .wing svg { width: 100%; height: 100%; }
+
+  .front { width: 780px; height: 1080px; margin: 0 auto; }
+  .front .topbar { position: absolute; top: 0; left: 0; right: 0; height: 116px;
+                   background: var(--pink); border-bottom: 4px solid var(--ink);
+                   display: flex; align-items: center; justify-content: space-between; padding: 0 40px; }
+  .front .topbar .logo { color: #fff; font-size: 46px; font-weight: bold; letter-spacing: 0.02em; }
+  .front .topbar .bb { background: #fff; border: 3px solid var(--ink); border-radius: 999px;
+                       padding: 8px 22px; font-size: 22px; font-weight: bold; color: var(--pink-deep); }
+  .front .title { text-align: center; margin-top: 190px; font-size: 104px; color: var(--pink);
+                  font-weight: bold; line-height: 0.95;
+                  text-shadow: 4px 4px 0 var(--pink-line); }
+  .front .sub { text-align: center; margin-top: 26px; }
+  .front .sub .sticker { font-size: 26px; }
+  .front .hero { position: relative; width: 430px; margin: 60px auto 0; }
+  .front .hero img { width: 100%; display: block; border-radius: 16px; border: 3px solid var(--ink); }
+  .front .heroburst { position: absolute; inset: -40px; border-radius: 50%;
+                      background: radial-gradient(circle, var(--blush) 55%, transparent 72%); z-index: -1; }
+  .front .strip { position: absolute; bottom: 0; left: 0; right: 0; height: 92px; background: var(--butter);
+                  border-top: 4px solid var(--ink); display: grid; place-items: center;
+                  font-size: 30px; font-weight: bold; color: var(--ink); }
+
+  .row { display: grid; grid-template-columns: 470px 300px 300px 300px 340px; gap: 42px;
+         justify-content: center; margin-top: 46px; align-items: start; }
+  .row .panel { height: 640px; }
+
+  .back .head { background: var(--pink); border-bottom: 4px solid var(--ink); height: 84px;
+                display: grid; place-items: center; color: #fff; font-size: 32px; font-weight: bold; }
+  .designs { position: absolute; top: 108px; left: 24px; right: 24px; display: grid;
+             grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+  .design { text-align: center; }
+  .design .dimg { height: 148px; display: grid; place-items: center; background: var(--blush);
+                  border-radius: 12px; border: 3px solid var(--ink); padding: 6px; position: relative; overflow: hidden; }
+  .design .dimg img { height: 130px; width: auto; max-width: 100%; object-fit: contain; }
+  .design.lucky .dimg img { filter: blur(7px) saturate(0.3); opacity: 0.5; }
+  .design.lucky .dimg::after { content: "?"; position: absolute; inset: 0; display: grid; place-items: center;
+                               font-size: 56px; font-weight: bold; color: var(--pink-deep); }
+  .design .dname { font-size: 18px; font-weight: bold; color: var(--ink); margin-top: 6px; }
+  .barcode { height: 52px; width: 190px; position: relative;
+    background: repeating-linear-gradient(90deg, #333 0 3px, #fff 3px 5px, #333 5px 6px, #fff 6px 10px, #333 10px 12px, #fff 12px 15px); }
+  .barcode span { position: absolute; left: 0; right: 0; top: 100%; font-size: 13px; letter-spacing: 3px; color: #555; }
+  .back .barcode { position: absolute; bottom: 46px; left: 28px; }
+  .back .whichone { position: absolute; bottom: 40px; right: 26px; width: 170px; text-align: right;
+                    font-size: 18px; font-weight: bold; color: var(--pink-deep); line-height: 1.35; }
+
+  .side .band { position: absolute; top: 0; bottom: 0; left: 50%; width: 108px; transform: translateX(-50%);
+                background: var(--blush); border-left: 4px solid var(--ink); border-right: 4px solid var(--ink); }
+  .side .vtext { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(90deg);
+                 white-space: nowrap; font-size: 44px; font-weight: bold; color: var(--pink-deep);
+                 letter-spacing: 0.08em; }
+  .rightside .coco { display: block; width: 200px; margin: 150px auto 0; position: relative; z-index: 2; }
+  .rightside .cocotag { text-align: center; margin-top: 24px; position: relative; z-index: 2; }
+  .rightside .cocotag .sticker { font-size: 20px; }
+
+  .top .logo2 { text-align: center; margin-top: 250px; font-size: 58px; font-weight: bold; color: var(--pink);
+                text-shadow: 3px 3px 0 var(--pink-line); }
+  .top .dots { text-align: center; margin-top: 20px; font-size: 30px; color: var(--pink); letter-spacing: 0.5em; }
+
+  .bottom { background: var(--blush); }
+  .bottom .inner { position: absolute; inset: 22px; background: #fff; border: 3px solid var(--ink);
+                   border-radius: 12px; padding: 30px 24px; text-align: center; }
+  .bottom .logo3 { font-size: 34px; font-weight: bold; color: var(--pink); }
+  .bottom .contents { font-size: 19px; font-weight: bold; color: var(--ink); margin-top: 18px; line-height: 1.5; }
+  .bottom .warning { font-size: 16px; color: var(--ink); margin-top: 22px; line-height: 1.5; }
+  .bottom .barcode { margin: 26px auto 0; }
+  .bottom .cc { font-size: 15px; color: #888; margin-top: 24px; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div class="panel front">
+  <div class="topbar">
+    <div class="logo">cordi lab</div>
+    <div class="bb">blind box</div>
+  </div>
+  <div class="title">SOFT<br>LANDING</div>
+  <div class="sub"><span class="sticker">the anti-flip photocard sleeve</span></div>
+  <div class="hero">
+    <div class="heroburst"></div>
+    <img src="product-3.png" alt="">
+  </div>
+  <div class="strip">4 designs &middot; 1 surprise inside</div>
+</div>
+<p class="plabel">front</p>
+
+<div class="row">
+  <div>
+    <div class="panel back">
+      <div class="head">collect all 4</div>
+      <div class="designs">
+        <div class="design"><div class="dimg"><img src="product-2.png" alt=""></div><div class="dname">Silver Star</div></div>
+        <div class="design"><div class="dimg"><img src="product-3.png" alt=""></div><div class="dname">Snow Angel</div></div>
+        <div class="design"><div class="dimg"><img src="product-4.png" alt=""></div><div class="dname">Midnight Flight</div></div>
+        <div class="design lucky"><div class="dimg"><img src="product-1.png" alt=""></div><div class="dname">Teddy Wing &middot; hidden</div></div>
+      </div>
+      <div class="barcode"><span>8 50067 42024 7</span></div>
+      <div class="whichone">which one will you pull?</div>
+    </div>
+    <p class="plabel">back</p>
+  </div>
+
+  <div>
+    <div class="panel side">
+      <div class="band"></div>
+      <div class="vtext">SOFT LANDING</div>
+    </div>
+    <p class="plabel">left side</p>
+  </div>
+
+  <div>
+    <div class="panel side rightside">
+      <img class="coco" src="coco-winking.png" alt="">
+      <div class="cocotag"><span class="sticker">cordi lab</span></div>
+    </div>
+    <p class="plabel">right side</p>
+  </div>
+
+  <div>
+    <div class="panel side top">
+      <div class="logo2">cordi lab</div>
+      <div class="dots">&hearts; &hearts; &hearts;</div>
+    </div>
+    <p class="plabel">top</p>
+  </div>
+
+  <div>
+    <div class="panel bottom">
+      <div class="inner">
+        <div class="logo3">cordi lab</div>
+        <div class="contents">1 anti-flip photocard sleeve<br>random design</div>
+        <div class="warning">&#9888; small parts &mdash; not for children under 3</div>
+        <div class="barcode"><span>8 50067 42024 7</span></div>
+        <div class="cc">&copy; 2026 cordi lab &middot; made in china &middot; cordilab.com</div>
+      </div>
+    </div>
+    <p class="plabel">bottom</p>
+  </div>
+</div>
+
+</body>
+</html>
